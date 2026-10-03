@@ -5,9 +5,10 @@ import { VideoAds } from './components/VideoAds';
 import { FooterSchedule } from './components/FooterSchedule';
 import { useCurrentShift } from './hooks/useCurrentShift';
 import { useSchedule } from './hooks/useSchedule';
+import { AdminPage } from './pages/AdminPage';
 import './App.css';
 
-function App() {
+function DisplayBoard() {
   const currentShift = useCurrentShift();
   const { data, source } = useSchedule();
   const shift = data.shifts[currentShift];
@@ -24,12 +25,21 @@ function App() {
 
       <FooterSchedule currentShift={currentShift} data={data} />
 
-      {/* Small indicator so you know if Google Sheet is connected */}
       <div className="schedule-source">
-        Schedule: {source === 'google' ? 'Google Sheet ✓' : 'Local data'}
+        Schedule: {source === 'supabase' ? 'Supabase ✓' : 'Local data'}
       </div>
     </div>
   );
+}
+
+function App() {
+  const path = window.location.pathname.replace(/\/$/, '') || '/';
+
+  if (path === '/admin') {
+    return <AdminPage />;
+  }
+
+  return <DisplayBoard />;
 }
 
 export default App;

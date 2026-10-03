@@ -1,4 +1,4 @@
-# ER Duty Board – City General Hospital
+# ER Duty Board – Global Care Canlubang
 
 Live digital signage for the Emergency Room showing:
 
