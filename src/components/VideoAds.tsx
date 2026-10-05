@@ -1,25 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useVideos } from '../hooks/useVideos';
 
-function safeUrl(url: string): string {
-  try {
-    const u = new URL(url);
-    u.pathname = u.pathname
-      .split('/')
-      .map((seg) => {
-        try {
-          return encodeURIComponent(decodeURIComponent(seg));
-        } catch {
-          return encodeURIComponent(seg);
-        }
-      })
-      .join('/');
-    return u.toString();
-  } catch {
-    return url.replace(/ /g, '%20');
-  }
-}
-
 const panelStyle: React.CSSProperties = {
   position: 'relative',
   width: '100%',
@@ -41,14 +22,19 @@ const videoStyle: React.CSSProperties = {
   zIndex: 1,
 };
 
-/**
- * Supabase videos only. Inline styles so production CSS can't zero-size the player.
- */
+const ERR: Record<number, string> = {
+  1: 'aborted',
+  2: 'network',
+  3: 'decode',
+  4: 'src not supported',
+};
+
 export function VideoAds() {
   const { videos, loading } = useVideos();
 
+  // Use public_url as stored – do not re-encode (can break Supabase paths)
   const sources = useMemo(
-    () => videos.map((v) => safeUrl(v.public_url)),
+    () => videos.map((v) => v.public_url),
     [videos]
   );
   const names = useMemo(() => videos.map((v) => v.name), [videos]);
@@ -101,35 +87,36 @@ export function VideoAds() {
     };
 
     const handleError = () => {
-      const mediaError = video.error;
-      console.warn('Video error code:', mediaError?.code, sources[indexRef.current]);
+      const code = video.error?.code ?? 0;
+      const msg = ERR[code] || `err ${code}`;
+      console.warn('Video error:', msg, sources[indexRef.current]);
       setError(true);
       setStatus('Skipping…');
-      setDebug(`err ${mediaError?.code ?? '?'}`);
+      setDebug(msg);
       if (sources.length === 0) return;
       setTimeout(() => {
         setIndex((prev) => (prev + 1) % sources.length);
         setError(false);
-      }, 2500);
+      }, 3000);
     };
 
     const handlePlaying = () => {
-      setError(false);
       const w = video.videoWidth;
       const h = video.videoHeight;
       setDebug(`${w}x${h}`);
-      // If audio plays but videoWidth is 0, codec has no displayable video track
-      if (w === 0 || h === 0) {
-        setStatus('Audio only – re-encode as H.264');
-        setError(true);
-      } else {
+      if (w > 0 && h > 0) {
+        setError(false);
         setStatus(hasSound ? 'Playing with Sound' : 'Playing (click for sound)');
+      } else {
+        setError(true);
+        setStatus('Audio only – need H.264 video');
       }
     };
 
     const handleWaiting = () => setStatus('Buffering…');
     const handleCanPlay = () => {
       if (video.videoWidth > 0) {
+        setError(false);
         setStatus(hasSound ? 'Playing with Sound' : 'Playing (click for sound)');
       }
     };
@@ -160,13 +147,10 @@ export function VideoAds() {
     setStatus('Loading...');
     setDebug('');
 
-    video.setAttribute('data-src', src);
-    // Clear then set – more reliable on some browsers
-    video.removeAttribute('src');
-    video.load();
+    video.pause();
     video.src = src;
-    video.load();
     video.muted = !hasSound;
+    video.load();
 
     const tryPlay = async () => {
       try {
@@ -219,6 +203,7 @@ export function VideoAds() {
 
   const safeIndex = index % sources.length;
   const currentName = names[safeIndex] || '';
+  const currentSrc = sources[safeIndex] || '';
 
   return (
     <div className="video-ads" style={panelStyle}>
@@ -242,8 +227,11 @@ export function VideoAds() {
           <div style={{ fontSize: '0.85rem', marginTop: 8, opacity: 0.85 }}>
             {currentName}
           </div>
-          <div style={{ fontSize: '0.75rem', marginTop: 10, opacity: 0.65, maxWidth: '85%' }}>
-            Export again: MP4 · H.264 · AAC · 720p (HandBrake “Fast 720p30”)
+          <div style={{ fontSize: '0.75rem', marginTop: 8, opacity: 0.65 }}>
+            {debug || 'unknown error'}
+          </div>
+          <div style={{ fontSize: '0.7rem', marginTop: 12, opacity: 0.5, maxWidth: '90%', wordBreak: 'break-all' }}>
+            {currentSrc}
           </div>
         </div>
       )}

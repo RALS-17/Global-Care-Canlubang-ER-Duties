@@ -133,7 +133,11 @@ export function AdminPage() {
 
         const { error: upErr } = await supabase.storage
           .from('ads')
-          .upload(path, file, { cacheControl: '3600', upsert: false });
+          .upload(path, file, {
+            cacheControl: '3600',
+            upsert: false,
+            contentType: file.type || 'video/mp4',
+          });
 
         if (upErr) throw upErr;
 
