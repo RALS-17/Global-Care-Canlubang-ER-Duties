@@ -2,16 +2,10 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { useVideos } from '../hooks/useVideos';
 
 const panelStyle: React.CSSProperties = {
-  position: 'relative',
-  flex: '1 1 0%',
-  width: '100%',
-  minWidth: 320,
-  minHeight: 0,
-  height: '100%',
+  /* Position/size come from CSS absolute rules – do not override */
   background: '#000',
   overflow: 'hidden',
   borderRadius: 6,
-  alignSelf: 'stretch',
 };
 
 const videoStyle: React.CSSProperties = {

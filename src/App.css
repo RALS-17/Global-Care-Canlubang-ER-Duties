@@ -157,28 +157,27 @@ html, body, #root {
 
 /* ========== MAIN CONTENT ========== */
 .main-content {
-  /* Flex row – reliable height on all browsers / Vercel */
-  display: flex;
-  flex-direction: row;
-  align-items: stretch;
+  /* Absolute children – never collapses on Vercel full page */
+  position: relative;
   flex: 1 1 0%;
   min-height: 0;
-  gap: 1rem;
-  padding: 1rem 1.25rem;
   overflow: hidden;
+  padding: 0;
 }
 
 /* ========== STAFF PANEL ========== */
 .staff-panel {
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  bottom: 1rem;
+  width: min(400px, 36vw);
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
-  flex: 0 0 36%;
-  width: 36%;
-  max-width: 440px;
-  min-width: 280px;
   min-height: 0;
   overflow: hidden;
+  z-index: 2;
 }
 
 .staff-card {
@@ -295,17 +294,22 @@ html, body, #root {
 
 /* ========== VIDEO ADS ========== */
 .video-ads {
-  /* Must grow – this was collapsing to 0 height on Vercel */
-  position: relative;
-  flex: 1 1 0%;
-  min-width: 320px;
-  min-height: 0;
-  align-self: stretch;
+  /* Fill everything to the right of the staff panel */
+  position: absolute !important;
+  left: calc(min(400px, 36vw) + 2rem);
+  right: 1rem;
+  top: 1rem;
+  bottom: 1rem;
+  width: auto !important;
+  height: auto !important;
+  min-width: 200px !important;
+  min-height: 200px !important;
   background: #000;
   border-radius: var(--radius);
   overflow: hidden;
   box-shadow: var(--shadow-lg);
   border: 1px solid rgba(0, 0, 0, 0.08);
+  z-index: 1;
 }
 
 /* Fill the whole panel so picture is visible (audio-only was height:0) */
