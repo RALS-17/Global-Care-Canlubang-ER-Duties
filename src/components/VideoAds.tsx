@@ -22,23 +22,37 @@ const videoStyle: React.CSSProperties = {
   zIndex: 1,
 };
 
-const ERR: Record<number, string> = {
-  1: 'aborted',
-  2: 'network',
-  3: 'decode',
-  4: 'src not supported',
-};
+/**
+ * Load via fetch → blob URL so playback is same-origin to the page.
+ * Fixes many "works on localhost, black on Vercel" cases with Supabase Storage.
+ */
+async function toBlobUrl(remoteUrl: string): Promise<string> {
+  const res = await fetch(remoteUrl, {
+    mode: 'cors',
+    credentials: 'omit',
+    cache: 'default',
+  });
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+  const blob = await res.blob();
+  // Force a video mime if storage sent octet-stream
+  const typed =
+    blob.type && blob.type.startsWith('video/')
+      ? blob
+      : new Blob([blob], { type: 'video/mp4' });
+  return URL.createObjectURL(typed);
+}
 
 export function VideoAds() {
   const { videos, loading } = useVideos();
 
-  // Use public_url as stored – do not re-encode (can break Supabase paths)
-  const sources = useMemo(
+  const remoteUrls = useMemo(
     () => videos.map((v) => v.public_url),
     [videos]
   );
   const names = useMemo(() => videos.map((v) => v.name), [videos]);
-  const sourcesKey = useMemo(() => sources.join('|'), [sources]);
+  const listKey = useMemo(() => remoteUrls.join('|'), [remoteUrls]);
 
   const [index, setIndex] = useState(0);
   const [error, setError] = useState(false);
@@ -46,6 +60,7 @@ export function VideoAds() {
   const [hasSound, setHasSound] = useState(false);
   const [debug, setDebug] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
+  const blobUrlRef = useRef<string | null>(null);
   const indexRef = useRef(0);
 
   useEffect(() => {
@@ -54,8 +69,9 @@ export function VideoAds() {
 
   useEffect(() => {
     setIndex(0);
-  }, [sourcesKey]);
+  }, [listKey]);
 
+  // Unlock audio on first gesture
   useEffect(() => {
     const enableSound = () => {
       const video = videoRef.current;
@@ -66,41 +82,36 @@ export function VideoAds() {
       video.play().catch(() => {});
     };
     const events = ['click', 'touchstart', 'keydown'] as const;
-    events.forEach((evt) =>
-      document.addEventListener(evt, enableSound, { once: true })
-    );
+    events.forEach((e) => document.addEventListener(e, enableSound, { once: true }));
     return () => {
-      events.forEach((evt) =>
-        document.removeEventListener(evt, enableSound)
-      );
+      events.forEach((e) => document.removeEventListener(e, enableSound));
     };
   }, []);
 
+  // Media events
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    const handleEnded = () => {
-      if (sources.length === 0) return;
-      setIndex((prev) => (prev + 1) % sources.length);
+    const onEnded = () => {
+      if (remoteUrls.length === 0) return;
+      setIndex((i) => (i + 1) % remoteUrls.length);
       setError(false);
     };
 
-    const handleError = () => {
-      const code = video.error?.code ?? 0;
-      const msg = ERR[code] || `err ${code}`;
-      console.warn('Video error:', msg, sources[indexRef.current]);
+    const onError = () => {
+      const code = video.error?.code;
       setError(true);
       setStatus('Skipping…');
-      setDebug(msg);
-      if (sources.length === 0) return;
+      setDebug(code ? `media err ${code}` : 'media error');
+      if (remoteUrls.length === 0) return;
       setTimeout(() => {
-        setIndex((prev) => (prev + 1) % sources.length);
+        setIndex((i) => (i + 1) % remoteUrls.length);
         setError(false);
-      }, 3000);
+      }, 2500);
     };
 
-    const handlePlaying = () => {
+    const onPlaying = () => {
       const w = video.videoWidth;
       const h = video.videoHeight;
       setDebug(`${w}x${h}`);
@@ -109,50 +120,68 @@ export function VideoAds() {
         setStatus(hasSound ? 'Playing with Sound' : 'Playing (click for sound)');
       } else {
         setError(true);
-        setStatus('Audio only – need H.264 video');
+        setStatus('Audio only – bad encode');
       }
     };
 
-    const handleWaiting = () => setStatus('Buffering…');
-    const handleCanPlay = () => {
-      if (video.videoWidth > 0) {
-        setError(false);
-        setStatus(hasSound ? 'Playing with Sound' : 'Playing (click for sound)');
-      }
-    };
-
-    video.addEventListener('ended', handleEnded);
-    video.addEventListener('error', handleError);
-    video.addEventListener('playing', handlePlaying);
-    video.addEventListener('waiting', handleWaiting);
-    video.addEventListener('canplay', handleCanPlay);
+    video.addEventListener('ended', onEnded);
+    video.addEventListener('error', onError);
+    video.addEventListener('playing', onPlaying);
+    video.addEventListener('waiting', () => setStatus('Buffering…'));
 
     return () => {
-      video.removeEventListener('ended', handleEnded);
-      video.removeEventListener('error', handleError);
-      video.removeEventListener('playing', handlePlaying);
-      video.removeEventListener('waiting', handleWaiting);
-      video.removeEventListener('canplay', handleCanPlay);
+      video.removeEventListener('ended', onEnded);
+      video.removeEventListener('error', onError);
+      video.removeEventListener('playing', onPlaying);
     };
-  }, [sources, hasSound]);
+  }, [remoteUrls, hasSound]);
 
+  // Load current video as blob (preferred) or direct URL fallback
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || sources.length === 0) return;
+    if (!video || remoteUrls.length === 0) return;
 
-    const src = sources[index % sources.length];
-    if (!src) return;
+    let cancelled = false;
+    const remote = remoteUrls[index % remoteUrls.length];
 
-    setError(false);
-    setStatus('Loading...');
-    setDebug('');
+    const run = async () => {
+      setError(false);
+      setStatus('Loading…');
+      setDebug('');
 
-    video.pause();
-    video.src = src;
-    video.muted = !hasSound;
-    video.load();
+      // Revoke previous blob
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
 
-    const tryPlay = async () => {
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+
+      let playUrl = remote;
+
+      try {
+        setStatus('Downloading…');
+        playUrl = await toBlobUrl(remote);
+        if (cancelled) {
+          URL.revokeObjectURL(playUrl);
+          return;
+        }
+        blobUrlRef.current = playUrl;
+        setDebug('blob');
+      } catch (e) {
+        console.warn('Blob fetch failed, direct URL:', e);
+        playUrl = remote;
+        setDebug('direct');
+      }
+
+      if (cancelled) return;
+
+      video.src = playUrl;
+      video.muted = !hasSound;
+      video.load();
+
       try {
         await video.play();
         if (!video.muted) {
@@ -172,13 +201,24 @@ export function VideoAds() {
       }
     };
 
-    tryPlay();
-  }, [index, sourcesKey, hasSound, sources]);
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [index, listKey, hasSound, remoteUrls]);
 
   useEffect(() => {
     const video = videoRef.current;
     if (video) video.muted = !hasSound;
   }, [hasSound]);
+
+  // Cleanup blobs on unmount
+  useEffect(() => {
+    return () => {
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -188,22 +228,21 @@ export function VideoAds() {
     );
   }
 
-  if (sources.length === 0) {
+  if (remoteUrls.length === 0) {
     return (
       <div className="video-ads" style={panelStyle}>
         <div className="video-error">
           <div>No videos uploaded</div>
           <div style={{ fontSize: '0.9rem', marginTop: 8, opacity: 0.8 }}>
-            Upload videos in Admin → Videos
+            Upload in Admin → Videos
           </div>
         </div>
       </div>
     );
   }
 
-  const safeIndex = index % sources.length;
+  const safeIndex = index % remoteUrls.length;
   const currentName = names[safeIndex] || '';
-  const currentSrc = sources[safeIndex] || '';
 
   return (
     <div className="video-ads" style={panelStyle}>
@@ -214,7 +253,6 @@ export function VideoAds() {
         playsInline
         autoPlay
         preload="auto"
-        controls={false}
       />
 
       {!hasSound && !error && (
@@ -224,20 +262,15 @@ export function VideoAds() {
       {error && (
         <div className="video-error">
           <div>⚠️ Could not display video</div>
-          <div style={{ fontSize: '0.85rem', marginTop: 8, opacity: 0.85 }}>
-            {currentName}
-          </div>
-          <div style={{ fontSize: '0.75rem', marginTop: 8, opacity: 0.65 }}>
-            {debug || 'unknown error'}
-          </div>
-          <div style={{ fontSize: '0.7rem', marginTop: 12, opacity: 0.5, maxWidth: '90%', wordBreak: 'break-all' }}>
-            {currentSrc}
+          <div style={{ fontSize: '0.85rem', marginTop: 8 }}>{currentName}</div>
+          <div style={{ fontSize: '0.75rem', marginTop: 8, opacity: 0.7 }}>
+            {debug}
           </div>
         </div>
       )}
 
       <div className="ad-label">
-        AD CYCLE • {safeIndex + 1}/{sources.length} • {status}
+        AD CYCLE • {safeIndex + 1}/{remoteUrls.length} • {status}
         {debug ? ` · ${debug}` : ''}
       </div>
       <div className="ad-title">{currentName}</div>
