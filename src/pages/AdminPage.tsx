@@ -173,6 +173,29 @@ export function AdminPage() {
     }
   };
 
+  /** Move video up/down in playlist order */
+  const moveVideo = async (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= videos.length) return;
+
+    const next = [...videos];
+    const tmp = next[index];
+    next[index] = next[target];
+    next[target] = tmp;
+    setVideos(next);
+
+    try {
+      await Promise.all(
+        next.map((v, i) =>
+          supabase.from('videos').update({ sort_order: i }).eq('id', v.id)
+        )
+      );
+    } catch (err) {
+      alert('Reorder failed: ' + (err instanceof Error ? err.message : 'unknown'));
+      await loadVideos();
+    }
+  };
+
   // —— Login screen ——
   if (!authed) {
     return (
@@ -335,10 +358,12 @@ export function AdminPage() {
         )}
 
         {tab === 'videos' && (
-          <section className="admin-section">
+          <section className="admin-section videos-section">
             <div className="section-head">
               <h2>Video Ads</h2>
-              <p>Upload MP4 files. They play in order on the ER display.</p>
+              <p>
+                Upload MP4 (H.264). Use ↑ ↓ to set play order (sunod-sunod). List scrolls if many videos.
+              </p>
             </div>
 
             <div className="upload-box">
@@ -357,34 +382,60 @@ export function AdminPage() {
               {uploadProgress && <div className="upload-status">{uploadProgress}</div>}
             </div>
 
-            <div className="video-list">
-              {videos.length === 0 && (
-                <div className="empty-state">No videos yet. Upload some MP4 files above.</div>
-              )}
-              {videos.map((v, i) => (
-                <div key={v.id} className="video-row">
-                  <div className="video-row-info">
-                    <span className="video-num">{i + 1}</span>
-                    <div>
-                      <div className="video-name">{v.name}</div>
-                      <div className="video-meta">
-                        {new Date(v.created_at).toLocaleDateString()}
-                      </div>
+            <div className="video-list-scroll">
+              <div className="video-list">
+                {videos.length === 0 && (
+                  <div className="empty-state">No videos yet. Upload some MP4 files above.</div>
+                )}
+                {videos.map((v, i) => (
+                  <div key={v.id} className="video-row">
+                    <span className="video-order">{i + 1}</span>
+                    <div className="video-row-info">
+                      <span className="video-name">{v.name}</span>
+                      <span className="video-meta">#{i + 1} in playlist</span>
+                    </div>
+                    <div className="video-row-actions">
+                      <button
+                        type="button"
+                        className="btn-icon"
+                        title="Move up"
+                        disabled={i === 0}
+                        onClick={() => moveVideo(i, -1)}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-icon"
+                        title="Move down"
+                        disabled={i === videos.length - 1}
+                        onClick={() => moveVideo(i, 1)}
+                      >
+                        ↓
+                      </button>
+                      <a
+                        href={v.public_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn-link"
+                      >
+                        Preview
+                      </a>
+                      <button
+                        type="button"
+                        className="btn-danger"
+                        onClick={() => handleDelete(v)}
+                      >
+                        Delete
+                      </button>
                     </div>
                   </div>
-                  <div className="video-row-actions">
-                    <a href={v.public_url} target="_blank" rel="noreferrer" className="btn-sm">
-                      Preview
-                    </a>
-                    <button className="btn-sm danger" onClick={() => handleDelete(v)}>
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </section>
         )}
+
       </main>
     </div>
   );
