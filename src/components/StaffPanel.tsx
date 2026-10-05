@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { ShiftKey, ShiftData } from '../types';
+import type { ShiftKey, ShiftData, StaffMember } from '../types';
 import { STAFF_GROUP_ROTATE_MS } from '../config';
 
 interface Props {
@@ -7,7 +7,7 @@ interface Props {
   shift: ShiftData;
 }
 
-function StaffList({
+function StaffListNames({
   names,
   currentShift,
   tagClass = '',
@@ -20,11 +20,7 @@ function StaffList({
 }) {
   const tag = tagLabel || currentShift;
   const display = names.length > 0 ? names : ['No one listed'];
-
-  // Always duplicate so CSS -50% loop is seamless and never stops
   const loop = [...display, ...display];
-
-  // Slightly slower when few names so it still feels continuous
   const duration = Math.max(12, display.length * 4);
 
   return (
@@ -51,11 +47,55 @@ function StaffList({
   );
 }
 
-/**
- * Alternates every 3 minutes:
- * Group A → Nurses + ROD
- * Group B → Consultants + SHO
- */
+/** ROD / Consultant – name + department */
+function StaffListMembers({
+  members,
+  currentShift,
+  tagClass = '',
+  roleLabel,
+}: {
+  members: StaffMember[];
+  currentShift: ShiftKey;
+  tagClass?: string;
+  roleLabel: string;
+}) {
+  const display =
+    members.length > 0 ? members : [{ name: 'No one listed' } as StaffMember];
+  const loop = [...display, ...display];
+  const duration = Math.max(12, display.length * 4);
+  const empty = members.length === 0;
+
+  return (
+    <div className="staff-list-wrapper has-scroll">
+      <ul
+        className="staff-list scrolling"
+        style={{ animationDuration: `${duration}s` }}
+      >
+        {loop.map((m, i) => (
+          <li key={`${m.name}-${m.department || ''}-${i}`} className="staff-item staff-item-dept">
+            <div className="staff-text">
+              <span
+                className="staff-name"
+                style={empty ? { opacity: 0.45, fontWeight: 500 } : undefined}
+              >
+                {m.name}
+              </span>
+              {!empty && m.department && (
+                <span className="staff-dept">{m.department}</span>
+              )}
+            </div>
+            {!empty && (
+              <span className={`shift-tag ${tagClass}`}>
+                {roleLabel} • {currentShift}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function StaffPanel({ currentShift, shift }: Props) {
   const [group, setGroup] = useState<0 | 1>(0);
 
@@ -75,7 +115,7 @@ export function StaffPanel({ currentShift, shift }: Props) {
               <span className="icon">👩‍⚕️</span>
               <span>NURSES ON DUTY</span>
             </div>
-            <StaffList names={shift.nurses} currentShift={currentShift} />
+            <StaffListNames names={shift.nurses} currentShift={currentShift} />
           </div>
 
           <div className="staff-card rods-card">
@@ -83,11 +123,11 @@ export function StaffPanel({ currentShift, shift }: Props) {
               <span className="icon">👨‍⚕️</span>
               <span>RESIDENT ON DUTY (ROD)</span>
             </div>
-            <StaffList
-              names={shift.rods}
+            <StaffListMembers
+              members={shift.rods}
               currentShift={currentShift}
               tagClass="resident"
-              tagLabel={`Resident • ${currentShift}`}
+              roleLabel="Resident"
             />
           </div>
         </>
@@ -98,11 +138,11 @@ export function StaffPanel({ currentShift, shift }: Props) {
               <span className="icon">🩺</span>
               <span>CONSULTANT ON DECK</span>
             </div>
-            <StaffList
-              names={shift.consultants}
+            <StaffListMembers
+              members={shift.consultants}
               currentShift={currentShift}
               tagClass="consultant"
-              tagLabel={`Consultant • ${currentShift}`}
+              roleLabel="Consultant"
             />
           </div>
 
@@ -111,7 +151,7 @@ export function StaffPanel({ currentShift, shift }: Props) {
               <span className="icon">🏨</span>
               <span>SENIOR HOUSE OFFICER (SHO)</span>
             </div>
-            <StaffList
+            <StaffListNames
               names={shift.shos}
               currentShift={currentShift}
               tagClass="sho"

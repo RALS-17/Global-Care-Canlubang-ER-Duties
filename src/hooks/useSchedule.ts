@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { StaffData, ShiftKey } from '../types';
+import { parseMember } from '../types';
 import { staffData as fallbackData } from '../data/staff';
 import { supabase, type ScheduleRow } from '../lib/supabase';
 import { DATA_REFRESH_MS, isSupabaseConfigured } from '../config';
@@ -52,8 +53,8 @@ function rowsToStaffData(rows: ScheduleRow[]): StaffData {
       startHour: SHIFT_HOURS[key].startHour,
       endHour: SHIFT_HOURS[key].endHour,
       nurses: row.nurses || [],
-      rods: row.rods || [],
-      consultants: row.consultants || [],
+      rods: (row.rods || []).map(parseMember).filter((m) => m.name),
+      consultants: (row.consultants || []).map(parseMember).filter((m) => m.name),
       shos: row.shos || [],
     };
   }

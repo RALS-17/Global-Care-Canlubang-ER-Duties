@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { ADMIN_PASSWORD, isSupabaseConfigured, SUPABASE_URL } from '../config';
 import { supabase, type ScheduleRow, type VideoRow } from '../lib/supabase';
 import type { ShiftKey } from '../types';
+import { parseMember, parseMemberList, membersToFormText, encodeMember } from '../types';
 import './AdminPage.css';
 
 const SHIFTS: { key: ShiftKey; defaultLabel: string }[] = [
@@ -73,8 +74,8 @@ export function AdminPage() {
       next[key] = {
         label: row.label,
         nurses: (row.nurses || []).join(', '),
-        rods: (row.rods || []).join(', '),
-        consultants: (row.consultants || []).join(', '),
+        rods: membersToFormText((row.rods || []).map(parseMember)),
+        consultants: membersToFormText((row.consultants || []).map(parseMember)),
         shos: (row.shos || []).join(', '),
       };
     }
@@ -95,16 +96,16 @@ export function AdminPage() {
     setSaveMsg('');
     try {
       for (const { key } of SHIFTS) {
-        const split = (s: string) =>
+        const splitNames = (s: string) =>
           s.split(',').map((x) => x.trim()).filter(Boolean);
 
         const { error } = await supabase.from('schedules').upsert({
           shift_key: key,
           label: form[key].label || SHIFTS.find((s) => s.key === key)!.defaultLabel,
-          nurses: split(form[key].nurses),
-          rods: split(form[key].rods),
-          consultants: split(form[key].consultants),
-          shos: split(form[key].shos),
+          nurses: splitNames(form[key].nurses),
+          rods: parseMemberList(form[key].rods).map(encodeMember),
+          consultants: parseMemberList(form[key].consultants).map(encodeMember),
+          shos: splitNames(form[key].shos),
           updated_at: new Date().toISOString(),
         });
         if (error) throw error;
@@ -304,9 +305,9 @@ export function AdminPage() {
                   />
                 </div>
                 <div className="field">
-                  <label>ROD – Resident on Duty (comma separated)</label>
+                  <label>ROD – Resident on Duty (one per line: Name | Department)</label>
                   <textarea
-                    rows={2}
+                    rows={3}
                     value={form[key].rods}
                     onChange={(e) =>
                       setForm((f) => ({
@@ -314,13 +315,13 @@ export function AdminPage() {
                         [key]: { ...f[key], rods: e.target.value },
                       }))
                     }
-                    placeholder="Dr. James K., Dr. Emily R."
+                    placeholder={"Dr. Eli A. | Emergency Medicine\nDr. Priya S. | Surgery"}
                   />
                 </div>
                 <div className="field">
-                  <label>Consultant on Deck (comma separated)</label>
+                  <label>Consultant on Deck (one per line: Name | Department)</label>
                   <textarea
-                    rows={2}
+                    rows={3}
                     value={form[key].consultants}
                     onChange={(e) =>
                       setForm((f) => ({
@@ -328,7 +329,7 @@ export function AdminPage() {
                         [key]: { ...f[key], consultants: e.target.value },
                       }))
                     }
-                    placeholder="Dr. Consultant A."
+                    placeholder={"Dr. Santos | Internal Medicine\nDr. Reyes | Pediatrics"}
                   />
                 </div>
                 <div className="field">
