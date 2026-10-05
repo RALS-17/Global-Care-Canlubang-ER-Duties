@@ -634,3 +634,22 @@
     max-height: 50vh;
   }
 }
+
+.btn-secondary {
+  background: #fff;
+  color: var(--admin-text);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  padding: 0.7rem 1.1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--admin-blue);
+  color: var(--admin-blue);
+}
+.btn-secondary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

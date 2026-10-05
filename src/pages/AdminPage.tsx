@@ -57,6 +57,8 @@ export function AdminPage() {
     setAuthed(false);
   };
 
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+
   // Load schedule + videos when authenticated
   useEffect(() => {
     if (!authed) return;
@@ -64,22 +66,37 @@ export function AdminPage() {
     loadVideos();
   }, [authed]);
 
+  // Reload saved schedule whenever user opens the Schedule tab
+  useEffect(() => {
+    if (!authed || tab !== 'schedule') return;
+    loadSchedule();
+  }, [tab, authed]);
+
   const loadSchedule = async () => {
-    const { data } = await supabase.from('schedules').select('*');
-    if (!data) return;
-    const next = emptyForm();
-    for (const row of data as ScheduleRow[]) {
-      const key = row.shift_key as ShiftKey;
-      if (!next[key]) continue;
-      next[key] = {
-        label: row.label,
-        nurses: (row.nurses || []).join(', '),
-        rods: membersToFormText((row.rods || []).map(parseMember)),
-        consultants: membersToFormText((row.consultants || []).map(parseMember)),
-        shos: (row.shos || []).join(', '),
-      };
+    setScheduleLoading(true);
+    try {
+      const { data, error } = await supabase.from('schedules').select('*');
+      if (error) throw error;
+      const next = emptyForm();
+      for (const row of (data || []) as ScheduleRow[]) {
+        const key = row.shift_key as ShiftKey;
+        if (!next[key]) continue;
+        next[key] = {
+          label: row.label || next[key].label,
+          nurses: (row.nurses || []).join(', '),
+          rods: membersToFormText((row.rods || []).map((x) => parseMember(String(x)))),
+          consultants: membersToFormText(
+            (row.consultants || []).map((x) => parseMember(String(x)))
+          ),
+          shos: (row.shos || []).join(', '),
+        };
+      }
+      setForm(next);
+    } catch (err) {
+      console.warn('loadSchedule failed', err);
+    } finally {
+      setScheduleLoading(false);
     }
-    setForm(next);
   };
 
   const loadVideos = async () => {
@@ -95,11 +112,12 @@ export function AdminPage() {
     setSaving(true);
     setSaveMsg('');
     try {
-      for (const { key } of SHIFTS) {
-        const splitNames = (s: string) =>
-          s.split(',').map((x) => x.trim()).filter(Boolean);
+      const splitNames = (s: string) =>
+        s.split(',').map((x) => x.trim()).filter(Boolean);
 
-        const { error } = await supabase.from('schedules').upsert({
+      // Save what is currently shown in the form (all shifts keep their fields)
+      for (const { key } of SHIFTS) {
+        const row = {
           shift_key: key,
           label: form[key].label || SHIFTS.find((s) => s.key === key)!.defaultLabel,
           nurses: splitNames(form[key].nurses),
@@ -107,11 +125,16 @@ export function AdminPage() {
           consultants: parseMemberList(form[key].consultants).map(encodeMember),
           shos: splitNames(form[key].shos),
           updated_at: new Date().toISOString(),
-        });
+        };
+
+        const { error } = await supabase.from('schedules').upsert(row);
         if (error) throw error;
       }
-      setSaveMsg('Schedule saved ✓');
-      setTimeout(() => setSaveMsg(''), 3000);
+
+      // Reload from database so the form always shows the saved values
+      await loadSchedule();
+      setSaveMsg('Schedule saved ✓ — all current names kept');
+      setTimeout(() => setSaveMsg(''), 3500);
     } catch (err: unknown) {
       setSaveMsg('Error: ' + (err instanceof Error ? err.message : 'Save failed'));
     } finally {
@@ -350,8 +373,16 @@ export function AdminPage() {
             ))}
 
             <div className="save-bar">
-              <button className="btn-primary" onClick={saveSchedule} disabled={saving}>
+              <button className="btn-primary" onClick={saveSchedule} disabled={saving || scheduleLoading}>
                 {saving ? 'Saving…' : 'Save Schedule'}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => loadSchedule()}
+                disabled={scheduleLoading || saving}
+              >
+                {scheduleLoading ? 'Loading…' : 'Reload saved'}
               </button>
               {saveMsg && <span className="save-msg">{saveMsg}</span>}
             </div>
