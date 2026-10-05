@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { StaffData, ShiftKey } from '../types';
 import { staffData as fallbackData } from '../data/staff';
 import { supabase, type ScheduleRow } from '../lib/supabase';
@@ -10,13 +10,40 @@ const SHIFT_HOURS: Record<ShiftKey, { startHour: number; endHour: number; defaul
   '10-6': { startHour: 22, endHour: 6, defaultLabel: '22:00 – 06:00 (10-6)' },
 };
 
-function rowsToStaffData(rows: ScheduleRow[]): StaffData {
-  const shifts: StaffData['shifts'] = {
-    '6-2': { label: SHIFT_HOURS['6-2'].defaultLabel, startHour: 6, endHour: 14, nurses: [], rods: [] },
-    '2-10': { label: SHIFT_HOURS['2-10'].defaultLabel, startHour: 14, endHour: 22, nurses: [], rods: [] },
-    '10-6': { label: SHIFT_HOURS['10-6'].defaultLabel, startHour: 22, endHour: 6, nurses: [], rods: [] },
+function emptyShifts(): StaffData['shifts'] {
+  return {
+    '6-2': {
+      label: SHIFT_HOURS['6-2'].defaultLabel,
+      startHour: 6,
+      endHour: 14,
+      nurses: [],
+      rods: [],
+      consultants: [],
+      shos: [],
+    },
+    '2-10': {
+      label: SHIFT_HOURS['2-10'].defaultLabel,
+      startHour: 14,
+      endHour: 22,
+      nurses: [],
+      rods: [],
+      consultants: [],
+      shos: [],
+    },
+    '10-6': {
+      label: SHIFT_HOURS['10-6'].defaultLabel,
+      startHour: 22,
+      endHour: 6,
+      nurses: [],
+      rods: [],
+      consultants: [],
+      shos: [],
+    },
   };
+}
 
+function rowsToStaffData(rows: ScheduleRow[]): StaffData {
+  const shifts = emptyShifts();
   for (const row of rows) {
     const key = row.shift_key as ShiftKey;
     if (!shifts[key]) continue;
@@ -26,6 +53,8 @@ function rowsToStaffData(rows: ScheduleRow[]): StaffData {
       endHour: SHIFT_HOURS[key].endHour,
       nurses: row.nurses || [],
       rods: row.rods || [],
+      consultants: row.consultants || [],
+      shos: row.shos || [],
     };
   }
   return { shifts };
@@ -36,7 +65,7 @@ export function useSchedule() {
   const [loading, setLoading] = useState(true);
   const [source, setSource] = useState<'supabase' | 'local'>('local');
 
-  const fetchSchedule = async () => {
+  const fetchSchedule = useCallback(async () => {
     if (!isSupabaseConfigured) {
       setData(fallbackData);
       setSource('local');
@@ -65,13 +94,34 @@ export function useSchedule() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchSchedule();
+
+    // Backup poll
     const timer = setInterval(fetchSchedule, DATA_REFRESH_MS);
-    return () => clearInterval(timer);
-  }, []);
+
+    // Live updates via Supabase Realtime (no restart needed)
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    if (isSupabaseConfigured) {
+      channel = supabase
+        .channel('schedules-live')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'schedules' },
+          () => {
+            fetchSchedule();
+          }
+        )
+        .subscribe();
+    }
+
+    return () => {
+      clearInterval(timer);
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [fetchSchedule]);
 
   return { data, loading, source, refresh: fetchSchedule };
 }

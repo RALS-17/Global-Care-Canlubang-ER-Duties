@@ -10,10 +10,10 @@
   --text-secondary: #6b7280;
   --border: rgba(0, 0, 0, 0.06);
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04);
-  --shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.08);
-  --radius: 20px;
-  --radius-sm: 12px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --radius: 6px;
+  --radius-sm: 4px;
 }
 
 /* ========== RESET ========== */
@@ -39,7 +39,7 @@ html, body, #root {
   height: 100vh;
   width: 100vw;
   overflow: hidden;
-  background: linear-gradient(180deg, #eef1f5 0%, #f5f7fa 100%);
+  background: #f0f2f5;
 }
 
 /* ========== HEADER ========== */
@@ -47,12 +47,11 @@ html, body, #root {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: linear-gradient(135deg, #007AFF 0%, #0056d6 100%);
+  background: #007AFF;
   color: white;
-  padding: 0.9rem 2rem;
-  min-height: 76px;
+  padding: 0.75rem 1.5rem;
+  min-height: 72px;
   flex-shrink: 0;
-  box-shadow: 0 2px 12px rgba(0, 122, 255, 0.25);
 }
 
 .header-left {
@@ -69,20 +68,46 @@ html, body, #root {
 
 /* Circular logo */
 .logo-img {
-  width: 52px;
-  height: 52px;
-  object-fit: cover;
-  border-radius: 50%;
-  background: white;
-  padding: 3px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  border: 2px solid rgba(255, 255, 255, 0.9);
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+  border: none;
 }
 
-.hospital-name {
-  font-size: 1.4rem;
-  font-weight: 650;
-  letter-spacing: 0.2px;
+/* Logo text lockup – matches GLOBAL CARE / line / CANLUBANG */
+.hospital-lockup {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.05;
+}
+
+.hospital-line1 {
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #fff;
+  text-transform: uppercase;
+}
+
+.hospital-rule {
+  display: block;
+  width: 100%;
+  height: 2px;
+  background: #fff;
+  margin: 0.2rem 0 0.15rem;
+}
+
+.hospital-line2 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: #fff;
+  text-transform: uppercase;
 }
 
 .header-center {
@@ -115,23 +140,23 @@ html, body, #root {
 
 /* ========== CURRENT SHIFT BANNER ========== */
 .current-shift-banner {
-  background: linear-gradient(90deg, #34C759 0%, #2db84d 100%);
+  background: #34C759;
   color: white;
   text-align: center;
-  padding: 0.6rem 1.2rem;
-  font-size: 1.2rem;
+  padding: 0.55rem 1.2rem;
+  font-size: 1.15rem;
   font-weight: 650;
   letter-spacing: 0.8px;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(52, 199, 89, 0.2);
 }
 
 /* ========== MAIN CONTENT ========== */
 .main-content {
   display: flex;
   flex: 1;
-  gap: 1.5rem;
-  padding: 1.5rem 1.8rem;
+  align-items: stretch;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
   overflow: hidden;
   min-height: 0;
 }
@@ -140,10 +165,13 @@ html, body, #root {
 .staff-panel {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 0.85rem;
   width: 36%;
   min-width: 360px;
   max-width: 440px;
+  height: 100%;
+  min-height: 0;
+  align-self: stretch;
 }
 
 .staff-card {
@@ -154,8 +182,7 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   flex: 1;
-  border: 1px solid var(--border);
-  transition: box-shadow 0.2s ease;
+  border: 1px solid #e5e7eb;
 }
 
 .staff-card-header {
@@ -170,11 +197,11 @@ html, body, #root {
 }
 
 .nurses-header {
-  background: linear-gradient(135deg, #34C759 0%, #28a745 100%);
+  background: #34C759;
 }
 
 .rods-header {
-  background: linear-gradient(135deg, #007AFF 0%, #0056d6 100%);
+  background: #007AFF;
 }
 
 .icon {
@@ -182,7 +209,7 @@ html, body, #root {
   line-height: 1;
 }
 
-/* List container – fixed height for scrolling */
+/* List container – continuous nonstop scroll */
 .staff-list-wrapper {
   flex: 1;
   overflow: hidden;
@@ -190,47 +217,54 @@ html, body, #root {
   min-height: 0;
 }
 
+.staff-list-wrapper::before,
+.staff-list-wrapper::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 24px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.staff-list-wrapper::before {
+  top: 0;
+  background: linear-gradient(to bottom, #fff 0%, transparent 100%);
+}
+
+.staff-list-wrapper::after {
+  bottom: 0;
+  background: linear-gradient(to top, #fff 0%, transparent 100%);
+}
+
 .staff-list {
   list-style: none;
-  padding: 0.5rem 0;
+  padding: 0;
   margin: 0;
+  will-change: transform;
 }
 
-/* Auto-scroll animation when many items */
+/* Seamless infinite scroll – list is duplicated in JS, move by 50% */
 .staff-list.scrolling {
-  animation: autoScroll 18s linear infinite;
+  animation: marqueeScroll 20s linear infinite;
 }
 
-.staff-list.scrolling:hover {
-  animation-play-state: paused;
-}
-
-@keyframes autoScroll {
+@keyframes marqueeScroll {
   0%   { transform: translateY(0); }
-  15%  { transform: translateY(0); }
-  85%  { transform: translateY(calc(-100% + 160px)); }
-  100% { transform: translateY(calc(-100% + 160px)); }
+  100% { transform: translateY(-50%); }
 }
 
 .staff-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.85rem 1.4rem;
-  border-bottom: 1px solid #f0f0f5;
-  transition: background 0.15s ease;
-}
-
-.staff-item:last-child {
-  border-bottom: none;
-}
-
-.staff-item:hover {
-  background: #fafbfc;
+  padding: 0.9rem 1.25rem;
+  border-bottom: 1px solid #eef0f3;
 }
 
 .staff-name {
-  font-size: 1.3rem;
+  font-size: 1.25rem;
   font-weight: 600;
   color: var(--text);
   letter-spacing: -0.2px;
@@ -239,10 +273,10 @@ html, body, #root {
 .shift-tag {
   background: #e8f8ed;
   color: #1e7e34;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: 650;
-  padding: 0.28rem 0.75rem;
-  border-radius: 20px;
+  padding: 0.25rem 0.65rem;
+  border-radius: 4px;
   letter-spacing: 0.3px;
   white-space: nowrap;
 }
@@ -250,32 +284,6 @@ html, body, #root {
 .shift-tag.resident {
   background: #e8f1ff;
   color: #0056b3;
-}
-
-/* Fade masks for scroll areas */
-.staff-list-wrapper::before,
-.staff-list-wrapper::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 28px;
-  z-index: 2;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-
-.staff-list-wrapper.has-scroll::before {
-  top: 0;
-  background: linear-gradient(to bottom, white 0%, transparent 100%);
-  opacity: 1;
-}
-
-.staff-list-wrapper.has-scroll::after {
-  bottom: 0;
-  background: linear-gradient(to top, white 0%, transparent 100%);
-  opacity: 1;
 }
 
 /* ========== VIDEO ADS ========== */
@@ -287,6 +295,9 @@ html, body, #root {
   overflow: hidden;
   box-shadow: var(--shadow-lg);
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+  align-self: stretch;
   border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
@@ -307,7 +318,7 @@ html, body, #root {
   font-size: 0.8rem;
   font-weight: 600;
   padding: 0.4rem 0.9rem;
-  border-radius: 10px;
+  border-radius: 4px;
   letter-spacing: 0.4px;
 }
 
@@ -321,7 +332,7 @@ html, body, #root {
   font-size: 0.85rem;
   font-weight: 500;
   padding: 0.4rem 0.9rem;
-  border-radius: 10px;
+  border-radius: 4px;
   max-width: 55%;
   white-space: nowrap;
   overflow: hidden;
@@ -330,7 +341,7 @@ html, body, #root {
 
 /* ========== FOOTER ========== */
 .footer-schedule {
-  background: linear-gradient(135deg, #007AFF 0%, #0056d6 100%);
+  background: #007AFF;
   color: white;
   padding: 0.75rem 1.8rem;
   font-size: 1.05rem;
@@ -362,7 +373,7 @@ html, body, #root {
   font-weight: 700;
   background: rgba(255, 255, 255, 0.2);
   padding: 0.25rem 0.7rem;
-  border-radius: 8px;
+  border-radius: 4px;
   backdrop-filter: blur(4px);
 }
 
@@ -377,22 +388,24 @@ html, body, #root {
 
 /* ========== LARGE TV ========== */
 @media (min-width: 1600px) {
-  .hospital-name { font-size: 1.65rem; }
+  .hospital-line1 { font-size: 1.55rem; }
+  .hospital-line2 { font-size: 1.2rem; }
   .header-center { font-size: 1.9rem; }
   .clock { font-size: 2.5rem; }
   .current-shift-banner { font-size: 1.35rem; padding: 0.7rem; }
   .staff-name { font-size: 1.5rem; }
   .staff-card-header { font-size: 1.25rem; }
   .footer-schedule { font-size: 1.15rem; }
-  .logo-img { width: 60px; height: 60px; }
+  .logo-img { width: 64px; height: 64px; }
 }
 
 @media (min-width: 2500px) {
-  .hospital-name { font-size: 2.1rem; }
+  .hospital-line1 { font-size: 2rem; }
+  .hospital-line2 { font-size: 1.45rem; }
   .header-center { font-size: 2.4rem; }
   .clock { font-size: 3.2rem; }
   .staff-name { font-size: 1.85rem; }
-  .logo-img { width: 72px; height: 72px; }
+  .logo-img { width: 76px; height: 76px; }
   .staff-panel { min-width: 480px; max-width: 560px; }
 }
 
@@ -471,4 +484,24 @@ html, body, #root {
   color: rgba(255,255,255,0.5);
   z-index: 20;
   pointer-events: none;
+}
+
+
+
+.consultants-header {
+  background: #007AFF;
+}
+
+.shos-header {
+  background: #34C759;
+}
+
+.shift-tag.consultant {
+  background: #e8f1ff;
+  color: #0056b3;
+}
+
+.shift-tag.sho {
+  background: #e8f8ed;
+  color: #1e7e34;
 }

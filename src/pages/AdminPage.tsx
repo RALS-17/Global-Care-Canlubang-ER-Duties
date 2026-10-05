@@ -12,13 +12,13 @@ const SHIFTS: { key: ShiftKey; defaultLabel: string }[] = [
 
 type ScheduleForm = Record<
   ShiftKey,
-  { label: string; nurses: string; rods: string }
+  { label: string; nurses: string; rods: string; consultants: string; shos: string }
 >;
 
 const emptyForm = (): ScheduleForm => ({
-  '6-2': { label: '06:00 – 14:00 (6-2)', nurses: '', rods: '' },
-  '2-10': { label: '14:00 – 22:00 (2-10)', nurses: '', rods: '' },
-  '10-6': { label: '22:00 – 06:00 (10-6)', nurses: '', rods: '' },
+  '6-2': { label: '06:00 – 14:00 (6-2)', nurses: '', rods: '', consultants: '', shos: '' },
+  '2-10': { label: '14:00 – 22:00 (2-10)', nurses: '', rods: '', consultants: '', shos: '' },
+  '10-6': { label: '22:00 – 06:00 (10-6)', nurses: '', rods: '', consultants: '', shos: '' },
 });
 
 export function AdminPage() {
@@ -74,6 +74,8 @@ export function AdminPage() {
         label: row.label,
         nurses: (row.nurses || []).join(', '),
         rods: (row.rods || []).join(', '),
+        consultants: (row.consultants || []).join(', '),
+        shos: (row.shos || []).join(', '),
       };
     }
     setForm(next);
@@ -93,20 +95,16 @@ export function AdminPage() {
     setSaveMsg('');
     try {
       for (const { key } of SHIFTS) {
-        const nurses = form[key].nurses
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean);
-        const rods = form[key].rods
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean);
+        const split = (s: string) =>
+          s.split(',').map((x) => x.trim()).filter(Boolean);
 
         const { error } = await supabase.from('schedules').upsert({
           shift_key: key,
           label: form[key].label || SHIFTS.find((s) => s.key === key)!.defaultLabel,
-          nurses,
-          rods,
+          nurses: split(form[key].nurses),
+          rods: split(form[key].rods),
+          consultants: split(form[key].consultants),
+          shos: split(form[key].shos),
           updated_at: new Date().toISOString(),
         });
         if (error) throw error;
@@ -245,7 +243,7 @@ export function AdminPage() {
           <section className="admin-section">
             <div className="section-head">
               <h2>Weekly Duty Schedule</h2>
-              <p>Edit names, then click Save. TV updates within 1 minute.</p>
+              <p>Edit all 4 roles, then Save. TV updates live (no restart).</p>
             </div>
 
             {SHIFTS.map(({ key, defaultLabel }) => (
@@ -279,7 +277,7 @@ export function AdminPage() {
                   />
                 </div>
                 <div className="field">
-                  <label>ROD on Deck (comma separated)</label>
+                  <label>ROD – Resident on Duty (comma separated)</label>
                   <textarea
                     rows={2}
                     value={form[key].rods}
@@ -290,6 +288,34 @@ export function AdminPage() {
                       }))
                     }
                     placeholder="Dr. James K., Dr. Emily R."
+                  />
+                </div>
+                <div className="field">
+                  <label>Consultant on Deck (comma separated)</label>
+                  <textarea
+                    rows={2}
+                    value={form[key].consultants}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        [key]: { ...f[key], consultants: e.target.value },
+                      }))
+                    }
+                    placeholder="Dr. Consultant A."
+                  />
+                </div>
+                <div className="field">
+                  <label>Senior House Officer – SHO (comma separated)</label>
+                  <textarea
+                    rows={2}
+                    value={form[key].shos}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        [key]: { ...f[key], shos: e.target.value },
+                      }))
+                    }
+                    placeholder="Dr. SHO A."
                   />
                 </div>
               </div>

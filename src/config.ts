@@ -11,7 +11,11 @@ export const SUPABASE_ANON_KEY =
 export const ADMIN_PASSWORD =
   (import.meta.env.VITE_ADMIN_PASSWORD as string) || 'globalcare2026';
 
-export const DATA_REFRESH_MS = 60 * 1000;
+/** Backup poll interval (realtime is primary for live updates) */
+export const DATA_REFRESH_MS = 30 * 1000; // 30 seconds
+
+/** How long each staff group is shown on the TV (ms) */
+export const STAFF_GROUP_ROTATE_MS = 3 * 60 * 1000; // 3 minutes
 
 export const isSupabaseConfigured = Boolean(
   SUPABASE_URL &&

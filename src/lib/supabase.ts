@@ -11,6 +11,8 @@ export type ScheduleRow = {
   label: string;
   nurses: string[];
   rods: string[];
+  consultants: string[];
+  shos: string[];
   updated_at?: string;
 };
 

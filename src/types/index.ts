@@ -6,6 +6,8 @@ export interface ShiftData {
   endHour: number;
   nurses: string[];
   rods: string[];
+  consultants: string[];
+  shos: string[];
 }
 
 export interface StaffData {
