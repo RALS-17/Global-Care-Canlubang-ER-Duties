@@ -152,9 +152,10 @@ html, body, #root {
 
 /* ========== MAIN CONTENT ========== */
 .main-content {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(300px, 38%) 1fr;
+  grid-template-rows: 1fr;
   flex: 1;
-  align-items: stretch;
   gap: 1rem;
   padding: 1rem 1.25rem;
   overflow: hidden;
@@ -166,12 +167,10 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
-  width: 36%;
-  min-width: 360px;
-  max-width: 440px;
-  height: 100%;
+  min-width: 0;
   min-height: 0;
-  align-self: stretch;
+  height: 100%;
+  overflow: hidden;
 }
 
 .staff-card {
@@ -288,15 +287,15 @@ html, body, #root {
 
 /* ========== VIDEO ADS ========== */
 .video-ads {
-  flex: 1 1 0;
   position: relative;
   background: #111;
   border-radius: var(--radius);
   overflow: hidden;
   box-shadow: var(--shadow-lg);
-  min-width: 280px;
+  min-width: 0;
   min-height: 0;
-  align-self: stretch;
+  height: 100%;
+  width: 100%;
   border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
