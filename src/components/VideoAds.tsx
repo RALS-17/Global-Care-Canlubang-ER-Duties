@@ -1,11 +1,9 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useVideos } from '../hooks/useVideos';
 
-/** Fix spaces / special chars in Supabase public URLs */
 function safeUrl(url: string): string {
   try {
     const u = new URL(url);
-    // Re-encode each path segment safely
     u.pathname = u.pathname
       .split('/')
       .map((seg) => {
@@ -22,9 +20,29 @@ function safeUrl(url: string): string {
   }
 }
 
+const panelStyle: React.CSSProperties = {
+  position: 'relative',
+  width: '100%',
+  height: '100%',
+  minHeight: 280,
+  background: '#000',
+  overflow: 'hidden',
+  borderRadius: 6,
+};
+
+const videoStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  width: '100%',
+  height: '100%',
+  objectFit: 'contain',
+  background: '#000',
+  zIndex: 1,
+};
+
 /**
- * Only plays videos uploaded via Admin → Supabase.
- * Browser-friendly tip: use H.264 MP4 (not HEVC / huge HI RES files).
+ * Supabase videos only. Inline styles so production CSS can't zero-size the player.
  */
 export function VideoAds() {
   const { videos, loading } = useVideos();
@@ -33,16 +51,14 @@ export function VideoAds() {
     () => videos.map((v) => safeUrl(v.public_url)),
     [videos]
   );
-  const names = useMemo(
-    () => videos.map((v) => v.name),
-    [videos]
-  );
+  const names = useMemo(() => videos.map((v) => v.name), [videos]);
   const sourcesKey = useMemo(() => sources.join('|'), [sources]);
 
   const [index, setIndex] = useState(0);
   const [error, setError] = useState(false);
   const [status, setStatus] = useState('Loading...');
   const [hasSound, setHasSound] = useState(false);
+  const [debug, setDebug] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
   const indexRef = useRef(0);
 
@@ -64,11 +80,13 @@ export function VideoAds() {
       video.play().catch(() => {});
     };
     const events = ['click', 'touchstart', 'keydown'] as const;
-    events.forEach((evt) => {
-      document.addEventListener(evt, enableSound, { once: true });
-    });
+    events.forEach((evt) =>
+      document.addEventListener(evt, enableSound, { once: true })
+    );
     return () => {
-      events.forEach((evt) => document.removeEventListener(evt, enableSound));
+      events.forEach((evt) =>
+        document.removeEventListener(evt, enableSound)
+      );
     };
   }, []);
 
@@ -83,24 +101,37 @@ export function VideoAds() {
     };
 
     const handleError = () => {
-      console.warn('Video error:', sources[indexRef.current]);
+      const mediaError = video.error;
+      console.warn('Video error code:', mediaError?.code, sources[indexRef.current]);
       setError(true);
       setStatus('Skipping…');
+      setDebug(`err ${mediaError?.code ?? '?'}`);
       if (sources.length === 0) return;
       setTimeout(() => {
         setIndex((prev) => (prev + 1) % sources.length);
         setError(false);
-      }, 2000);
+      }, 2500);
     };
 
     const handlePlaying = () => {
       setError(false);
-      setStatus(hasSound ? 'Playing with Sound' : 'Playing (click for sound)');
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      setDebug(`${w}x${h}`);
+      // If audio plays but videoWidth is 0, codec has no displayable video track
+      if (w === 0 || h === 0) {
+        setStatus('Audio only – re-encode as H.264');
+        setError(true);
+      } else {
+        setStatus(hasSound ? 'Playing with Sound' : 'Playing (click for sound)');
+      }
     };
 
     const handleWaiting = () => setStatus('Buffering…');
     const handleCanPlay = () => {
-      setStatus(hasSound ? 'Playing with Sound' : 'Playing (click for sound)');
+      if (video.videoWidth > 0) {
+        setStatus(hasSound ? 'Playing with Sound' : 'Playing (click for sound)');
+      }
     };
 
     video.addEventListener('ended', handleEnded);
@@ -127,13 +158,14 @@ export function VideoAds() {
 
     setError(false);
     setStatus('Loading...');
+    setDebug('');
 
-    if (video.getAttribute('data-src') !== src) {
-      video.setAttribute('data-src', src);
-      video.src = src;
-      video.load();
-    }
-
+    video.setAttribute('data-src', src);
+    // Clear then set – more reliable on some browsers
+    video.removeAttribute('src');
+    video.load();
+    video.src = src;
+    video.load();
     video.muted = !hasSound;
 
     const tryPlay = async () => {
@@ -166,17 +198,15 @@ export function VideoAds() {
 
   if (loading) {
     return (
-      <div className="video-ads">
-        <div className="video-error">
-          <div>Loading videos…</div>
-        </div>
+      <div className="video-ads" style={panelStyle}>
+        <div className="video-error">Loading videos…</div>
       </div>
     );
   }
 
   if (sources.length === 0) {
     return (
-      <div className="video-ads">
+      <div className="video-ads" style={panelStyle}>
         <div className="video-error">
           <div>No videos uploaded</div>
           <div style={{ fontSize: '0.9rem', marginTop: 8, opacity: 0.8 }}>
@@ -191,13 +221,15 @@ export function VideoAds() {
   const currentName = names[safeIndex] || '';
 
   return (
-    <div className="video-ads">
+    <div className="video-ads" style={panelStyle}>
       <video
         ref={videoRef}
         className="video-player"
+        style={videoStyle}
         playsInline
         autoPlay
         preload="auto"
+        controls={false}
       />
 
       {!hasSound && !error && (
@@ -206,18 +238,19 @@ export function VideoAds() {
 
       {error && (
         <div className="video-error">
-          <div>⚠️ Could not play this file</div>
+          <div>⚠️ Could not display video</div>
           <div style={{ fontSize: '0.85rem', marginTop: 8, opacity: 0.85 }}>
             {currentName}
           </div>
-          <div style={{ fontSize: '0.75rem', marginTop: 10, opacity: 0.65, maxWidth: '80%' }}>
-            Use H.264 MP4 (720p). HI RES / HEVC often fails in browsers.
+          <div style={{ fontSize: '0.75rem', marginTop: 10, opacity: 0.65, maxWidth: '85%' }}>
+            Export again: MP4 · H.264 · AAC · 720p (HandBrake “Fast 720p30”)
           </div>
         </div>
       )}
 
       <div className="ad-label">
         AD CYCLE • {safeIndex + 1}/{sources.length} • {status}
+        {debug ? ` · ${debug}` : ''}
       </div>
       <div className="ad-title">{currentName}</div>
     </div>

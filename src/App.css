@@ -153,9 +153,9 @@ html, body, #root {
 /* ========== MAIN CONTENT ========== */
 .main-content {
   display: grid;
-  grid-template-columns: minmax(300px, 38%) 1fr;
-  grid-template-rows: 1fr;
-  flex: 1;
+  grid-template-columns: minmax(300px, 38%) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  flex: 1 1 auto;
   gap: 1rem;
   padding: 1rem 1.25rem;
   overflow: hidden;
