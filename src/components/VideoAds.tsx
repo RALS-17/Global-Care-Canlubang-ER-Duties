@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useVideos } from '../hooks/useVideos';
 
 const panelStyle: React.CSSProperties = {
@@ -34,11 +34,8 @@ async function toBlobUrl(remoteUrl: string): Promise<string> {
 }
 
 /**
- * Playlist rules:
- * - Each video plays to the very end (never cut mid-way by polls)
- * - Advance only on HTML5 `ended` (or hard error skip)
- * - After the LAST video ends → go to index 0 (full cycle complete)
- * - Same video must never restart unless it is the only item and it ended
+ * Full playlist cycle: play each ad to the end, then next.
+ * After the last ad → back to first.
  */
 export function VideoAds() {
   const { videos, loading } = useVideos();
@@ -53,7 +50,6 @@ export function VideoAds() {
     [videos]
   );
 
-  // Stable string: only changes when order/urls change
   const playlistId = useMemo(
     () => playlist.map((p) => `${p.id}:${p.url}`).join('|'),
     [playlist]
@@ -68,38 +64,30 @@ export function VideoAds() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const blobUrlRef = useRef<string | null>(null);
   const playlistRef = useRef(playlist);
-  const indexRef = useRef(0);
   const hasSoundRef = useRef(false);
-  const playGenRef = useRef(0); // ignores stale async loads
-  const activeSrcRef = useRef(''); // what we intentionally loaded
+  const playGenRef = useRef(0);
+  const loadedKeyRef = useRef('');
 
-  // Keep refs in sync without retriggering playback
   useEffect(() => {
     playlistRef.current = playlist;
   }, [playlist]);
 
   useEffect(() => {
-    indexRef.current = index;
-  }, [index]);
-
-  useEffect(() => {
     hasSoundRef.current = hasSound;
   }, [hasSound]);
 
-  // If playlist identity changes (reorder/upload/delete), start from #1
-  // Do NOT run on every identical poll.
+  // Playlist changed (upload/reorder/delete) → start at first
   const prevPlaylistId = useRef('');
   useEffect(() => {
     if (!playlistId) return;
     if (prevPlaylistId.current === playlistId) return;
-    const isFirst = prevPlaylistId.current === '';
+    const first = prevPlaylistId.current === '';
     prevPlaylistId.current = playlistId;
-    if (!isFirst) {
-      setIndex(0);
-    }
+    loadedKeyRef.current = '';
+    if (!first) setIndex(0);
   }, [playlistId]);
 
-  // Sound unlock – mute flag only
+  // Unlock sound once
   useEffect(() => {
     const enableSound = () => {
       const el = videoRef.current;
@@ -117,88 +105,70 @@ export function VideoAds() {
     };
   }, []);
 
-  // Wire ended / error once
-  useEffect(() => {
-    const el = videoRef.current;
-    if (!el) return;
-
-    const goNext = () => {
-      const len = playlistRef.current.length;
-      if (len === 0) return;
-      // 0..len-1 then wrap — full cycle before repeat
-      setIndex((prev) => {
-        const next = prev + 1;
-        return next >= len ? 0 : next;
-      });
-    };
-
-    const onEnded = () => {
-      // Only advance when this clip finished naturally
-      setError(false);
-      goNext();
-    };
-
-    const onError = () => {
-      setError(true);
-      setStatus('Skipping broken file…');
-      setDebug(`err ${el.error?.code ?? '?'}`);
-      // Skip to next after brief pause (does not restart same file in a loop)
-      window.setTimeout(() => {
-        goNext();
-        setError(false);
-      }, 1500);
-    };
-
-    const onPlaying = () => {
-      const w = el.videoWidth;
-      const h = el.videoHeight;
-      if (w > 0 && h > 0) {
-        setError(false);
-        setDebug(`${w}x${h}`);
-        setStatus(
-          hasSoundRef.current
-            ? 'Playing with Sound'
-            : 'Playing (click for sound)'
-        );
-      }
-    };
-
-    el.addEventListener('ended', onEnded);
-    el.addEventListener('error', onError);
-    el.addEventListener('playing', onPlaying);
-    el.addEventListener('waiting', () => setStatus('Buffering…'));
-
-    return () => {
-      el.removeEventListener('ended', onEnded);
-      el.removeEventListener('error', onError);
-      el.removeEventListener('playing', onPlaying);
-    };
+  /** Advance to next ad — used by onEnded on the <video> element */
+  const playNext = useCallback(() => {
+    const len = playlistRef.current.length;
+    if (len === 0) return;
+    setIndex((prev) => {
+      const next = prev + 1;
+      return next >= len ? 0 : next;
+    });
   }, []);
 
-  // Load ONLY when index or playlistId changes — never on poll noise
+  const handleEnded = useCallback(() => {
+    setError(false);
+    setStatus('Next video…');
+    // Clear loaded key so next index always loads
+    loadedKeyRef.current = '';
+    playNext();
+  }, [playNext]);
+
+  const handleError = useCallback(() => {
+    const el = videoRef.current;
+    setError(true);
+    setStatus('Skipping…');
+    setDebug(`err ${el?.error?.code ?? '?'}`);
+    loadedKeyRef.current = '';
+    window.setTimeout(() => {
+      setError(false);
+      playNext();
+    }, 1200);
+  }, [playNext]);
+
+  const handlePlaying = useCallback(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    const w = el.videoWidth;
+    const h = el.videoHeight;
+    if (w > 0 && h > 0) {
+      setError(false);
+      setDebug(`${w}x${h}`);
+      setStatus(
+        hasSoundRef.current
+          ? 'Playing with Sound'
+          : 'Playing (click for sound)'
+      );
+    }
+  }, []);
+
+  // Load current index
   useEffect(() => {
     const el = videoRef.current;
-    const list = playlistRef.current;
-    if (!el || list.length === 0) return;
+    if (!el || playlist.length === 0) return;
 
-    const item = list[index % list.length];
+    const item = playlist[index % playlist.length];
     if (!item) return;
 
-    // Same source already playing → do nothing (prevents cut/restart)
-    const intentKey = `${index}|${item.url}`;
-    if (activeSrcRef.current === intentKey && !el.ended && el.src) {
-      return;
-    }
-    activeSrcRef.current = intentKey;
+    const key = `${index}::${item.id}::${item.url}`;
+    if (loadedKeyRef.current === key) return;
+    loadedKeyRef.current = key;
 
     const gen = ++playGenRef.current;
 
     const run = async () => {
       setError(false);
       setStatus('Loading…');
-      setDebug('');
 
-      // Revoke previous blob
       if (blobUrlRef.current) {
         URL.revokeObjectURL(blobUrlRef.current);
         blobUrlRef.current = null;
@@ -207,19 +177,22 @@ export function VideoAds() {
       el.pause();
       el.loop = false;
       el.removeAttribute('src');
+      // clear sources
+      while (el.firstChild) el.removeChild(el.firstChild);
       el.load();
 
       let playUrl = item.url;
       try {
         setStatus('Downloading…');
-        playUrl = await toBlobUrl(item.url);
+        const blobUrl = await toBlobUrl(item.url);
         if (gen !== playGenRef.current) {
-          URL.revokeObjectURL(playUrl);
-          return; // stale
+          URL.revokeObjectURL(blobUrl);
+          return;
         }
-        blobUrlRef.current = playUrl;
+        blobUrlRef.current = blobUrl;
+        playUrl = blobUrl;
       } catch {
-        playUrl = item.url; // direct fallback
+        playUrl = item.url;
         if (gen !== playGenRef.current) return;
       }
 
@@ -252,9 +225,8 @@ export function VideoAds() {
     };
 
     run();
-  }, [index, playlistId]);
+  }, [index, playlistId, playlist]);
 
-  // Unmute only — never reload
   useEffect(() => {
     const el = videoRef.current;
     if (el) el.muted = !hasSound;
@@ -300,6 +272,10 @@ export function VideoAds() {
         autoPlay
         preload="auto"
         loop={false}
+        onEnded={handleEnded}
+        onError={handleError}
+        onPlaying={handlePlaying}
+        onWaiting={() => setStatus('Buffering…')}
       />
 
       {!hasSound && !error && (
