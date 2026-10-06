@@ -18,14 +18,11 @@ const videoStyle: React.CSSProperties = {
   zIndex: 1,
 };
 
-/**
- * Download remote file → blob URL (stable playback on Vercel).
- */
 async function toBlobUrl(remoteUrl: string): Promise<string> {
   const res = await fetch(remoteUrl, {
     mode: 'cors',
     credentials: 'omit',
-    cache: 'default',
+    cache: 'force-cache',
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const blob = await res.blob();
@@ -37,18 +34,30 @@ async function toBlobUrl(remoteUrl: string): Promise<string> {
 }
 
 /**
- * Full-length ads. Advances only on `ended`.
- * Loops the whole playlist only after the last video finishes.
+ * Playlist rules:
+ * - Each video plays to the very end (never cut mid-way by polls)
+ * - Advance only on HTML5 `ended` (or hard error skip)
+ * - After the LAST video ends → go to index 0 (full cycle complete)
+ * - Same video must never restart unless it is the only item and it ended
  */
 export function VideoAds() {
   const { videos, loading } = useVideos();
 
-  const remoteUrls = useMemo(
-    () => videos.map((v) => v.public_url),
+  const playlist = useMemo(
+    () =>
+      videos.map((v) => ({
+        url: v.public_url,
+        name: v.name,
+        id: v.id,
+      })),
     [videos]
   );
-  const names = useMemo(() => videos.map((v) => v.name), [videos]);
-  const listKey = useMemo(() => remoteUrls.join('|'), [remoteUrls]);
+
+  // Stable string: only changes when order/urls change
+  const playlistId = useMemo(
+    () => playlist.map((p) => `${p.id}:${p.url}`).join('|'),
+    [playlist]
+  );
 
   const [index, setIndex] = useState(0);
   const [error, setError] = useState(false);
@@ -58,101 +67,94 @@ export function VideoAds() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const blobUrlRef = useRef<string | null>(null);
+  const playlistRef = useRef(playlist);
   const indexRef = useRef(0);
-  const listLenRef = useRef(0);
-  const loadingRef = useRef(false);
   const hasSoundRef = useRef(false);
-  const lastListKeyRef = useRef('');
+  const playGenRef = useRef(0); // ignores stale async loads
+  const activeSrcRef = useRef(''); // what we intentionally loaded
+
+  // Keep refs in sync without retriggering playback
+  useEffect(() => {
+    playlistRef.current = playlist;
+  }, [playlist]);
 
   useEffect(() => {
     indexRef.current = index;
   }, [index]);
 
   useEffect(() => {
-    listLenRef.current = remoteUrls.length;
-  }, [remoteUrls.length]);
-
-  useEffect(() => {
     hasSoundRef.current = hasSound;
   }, [hasSound]);
 
-  // Only reset playlist when the URL list actually changes (not every poll)
+  // If playlist identity changes (reorder/upload/delete), start from #1
+  // Do NOT run on every identical poll.
+  const prevPlaylistId = useRef('');
   useEffect(() => {
-    if (listKey && listKey !== lastListKeyRef.current) {
-      lastListKeyRef.current = listKey;
+    if (!playlistId) return;
+    if (prevPlaylistId.current === playlistId) return;
+    const isFirst = prevPlaylistId.current === '';
+    prevPlaylistId.current = playlistId;
+    if (!isFirst) {
       setIndex(0);
     }
-  }, [listKey]);
+  }, [playlistId]);
 
-  // Unlock sound once – do NOT reload the video
+  // Sound unlock – mute flag only
   useEffect(() => {
     const enableSound = () => {
-      const video = videoRef.current;
-      if (!video) return;
-      video.muted = false;
+      const el = videoRef.current;
+      if (!el) return;
+      el.muted = false;
       hasSoundRef.current = true;
       setHasSound(true);
       setStatus('Playing with Sound');
-      video.play().catch(() => {});
+      el.play().catch(() => {});
     };
-    const events = ['click', 'touchstart', 'keydown'] as const;
-    events.forEach((e) =>
-      document.addEventListener(e, enableSound, { once: true })
-    );
+    const evts = ['click', 'touchstart', 'keydown'] as const;
+    evts.forEach((e) => document.addEventListener(e, enableSound, { once: true }));
     return () => {
-      events.forEach((e) =>
-        document.removeEventListener(e, enableSound)
-      );
+      evts.forEach((e) => document.removeEventListener(e, enableSound));
     };
   }, []);
 
-  // Media listeners – advance ONLY when a video truly ends
+  // Wire ended / error once
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
+    const el = videoRef.current;
+    if (!el) return;
+
+    const goNext = () => {
+      const len = playlistRef.current.length;
+      if (len === 0) return;
+      // 0..len-1 then wrap — full cycle before repeat
+      setIndex((prev) => {
+        const next = prev + 1;
+        return next >= len ? 0 : next;
+      });
+    };
 
     const onEnded = () => {
-      const len = listLenRef.current;
-      if (len === 0) return;
-      // Next index; after last video → back to 0 (full playlist loop only)
-      setIndex((prev) => (prev + 1) % len);
+      // Only advance when this clip finished naturally
       setError(false);
+      goNext();
     };
 
     const onError = () => {
-      const code = video.error?.code;
       setError(true);
-      setStatus('Skipping…');
-      setDebug(code ? `media err ${code}` : 'media error');
-      const len = listLenRef.current;
-      if (len === 0) return;
-      // Skip broken file after a short pause, still sequential
-      setTimeout(() => {
-        setIndex((prev) => (prev + 1) % len);
+      setStatus('Skipping broken file…');
+      setDebug(`err ${el.error?.code ?? '?'}`);
+      // Skip to next after brief pause (does not restart same file in a loop)
+      window.setTimeout(() => {
+        goNext();
         setError(false);
-      }, 2000);
+      }, 1500);
     };
 
     const onPlaying = () => {
-      const w = video.videoWidth;
-      const h = video.videoHeight;
-      setDebug(`${w}x${h}`);
+      const w = el.videoWidth;
+      const h = el.videoHeight;
       if (w > 0 && h > 0) {
         setError(false);
-        setStatus(
-          hasSoundRef.current
-            ? 'Playing with Sound'
-            : 'Playing (click for sound)'
-        );
-      } else {
-        setError(true);
-        setStatus('Audio only – bad encode');
-      }
-    };
-
-    const onTimeUpdate = () => {
-      // Keep status honest while playing through long ads
-      if (!video.paused && video.videoWidth > 0 && !video.ended) {
+        setDebug(`${w}x${h}`);
         setStatus(
           hasSoundRef.current
             ? 'Playing with Sound'
@@ -161,75 +163,76 @@ export function VideoAds() {
       }
     };
 
-    video.addEventListener('ended', onEnded);
-    video.addEventListener('error', onError);
-    video.addEventListener('playing', onPlaying);
-    video.addEventListener('waiting', () => setStatus('Buffering…'));
-    video.addEventListener('timeupdate', onTimeUpdate);
+    el.addEventListener('ended', onEnded);
+    el.addEventListener('error', onError);
+    el.addEventListener('playing', onPlaying);
+    el.addEventListener('waiting', () => setStatus('Buffering…'));
 
     return () => {
-      video.removeEventListener('ended', onEnded);
-      video.removeEventListener('error', onError);
-      video.removeEventListener('playing', onPlaying);
-      video.removeEventListener('timeupdate', onTimeUpdate);
+      el.removeEventListener('ended', onEnded);
+      el.removeEventListener('error', onError);
+      el.removeEventListener('playing', onPlaying);
     };
   }, []);
 
-  // Load video when INDEX or playlist changes — NOT when sound toggles
+  // Load ONLY when index or playlistId changes — never on poll noise
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video || remoteUrls.length === 0) return;
-    if (loadingRef.current) return;
+    const el = videoRef.current;
+    const list = playlistRef.current;
+    if (!el || list.length === 0) return;
 
-    let cancelled = false;
-    const remote = remoteUrls[index % remoteUrls.length];
-    if (!remote) return;
+    const item = list[index % list.length];
+    if (!item) return;
+
+    // Same source already playing → do nothing (prevents cut/restart)
+    const intentKey = `${index}|${item.url}`;
+    if (activeSrcRef.current === intentKey && !el.ended && el.src) {
+      return;
+    }
+    activeSrcRef.current = intentKey;
+
+    const gen = ++playGenRef.current;
 
     const run = async () => {
-      loadingRef.current = true;
       setError(false);
       setStatus('Loading…');
       setDebug('');
 
+      // Revoke previous blob
       if (blobUrlRef.current) {
         URL.revokeObjectURL(blobUrlRef.current);
         blobUrlRef.current = null;
       }
 
-      video.pause();
-      video.removeAttribute('src');
-      video.load();
+      el.pause();
+      el.loop = false;
+      el.removeAttribute('src');
+      el.load();
 
-      let playUrl = remote;
+      let playUrl = item.url;
       try {
         setStatus('Downloading…');
-        playUrl = await toBlobUrl(remote);
-        if (cancelled) {
+        playUrl = await toBlobUrl(item.url);
+        if (gen !== playGenRef.current) {
           URL.revokeObjectURL(playUrl);
-          loadingRef.current = false;
-          return;
+          return; // stale
         }
         blobUrlRef.current = playUrl;
-        setDebug('blob');
-      } catch (e) {
-        console.warn('Blob fetch failed, direct URL:', e);
-        playUrl = remote;
-        setDebug('direct');
+      } catch {
+        playUrl = item.url; // direct fallback
+        if (gen !== playGenRef.current) return;
       }
 
-      if (cancelled) {
-        loadingRef.current = false;
-        return;
-      }
+      if (gen !== playGenRef.current) return;
 
-      video.src = playUrl;
-      video.muted = !hasSoundRef.current;
-      // Ensure we don't loop a single file – playlist handles repeat
-      video.loop = false;
-      video.load();
+      el.src = playUrl;
+      el.loop = false;
+      el.muted = !hasSoundRef.current;
+      el.load();
 
       try {
-        await video.play();
+        await el.play();
+        if (gen !== playGenRef.current) return;
         setStatus(
           hasSoundRef.current
             ? 'Playing with Sound'
@@ -237,28 +240,24 @@ export function VideoAds() {
         );
       } catch {
         try {
-          video.muted = true;
-          await video.play();
+          el.muted = true;
+          await el.play();
+          if (gen !== playGenRef.current) return;
           setStatus('Playing (click for sound)');
         } catch {
+          if (gen !== playGenRef.current) return;
           setStatus('Click anywhere to start');
         }
       }
-      loadingRef.current = false;
     };
 
     run();
+  }, [index, playlistId]);
 
-    return () => {
-      cancelled = true;
-      loadingRef.current = false;
-    };
-  }, [index, listKey, remoteUrls]);
-
-  // Mute flag only – never reload
+  // Unmute only — never reload
   useEffect(() => {
-    const video = videoRef.current;
-    if (video) video.muted = !hasSound;
+    const el = videoRef.current;
+    if (el) el.muted = !hasSound;
   }, [hasSound]);
 
   useEffect(() => {
@@ -267,7 +266,7 @@ export function VideoAds() {
     };
   }, []);
 
-  if (loading) {
+  if (loading && playlist.length === 0) {
     return (
       <div className="video-ads" style={panelStyle}>
         <div className="video-error">Loading videos…</div>
@@ -275,7 +274,7 @@ export function VideoAds() {
     );
   }
 
-  if (remoteUrls.length === 0) {
+  if (playlist.length === 0) {
     return (
       <div className="video-ads" style={panelStyle}>
         <div className="video-error">
@@ -288,8 +287,8 @@ export function VideoAds() {
     );
   }
 
-  const safeIndex = index % remoteUrls.length;
-  const currentName = names[safeIndex] || '';
+  const safeIndex = index % playlist.length;
+  const currentName = playlist[safeIndex]?.name || '';
 
   return (
     <div className="video-ads" style={panelStyle}>
@@ -311,14 +310,11 @@ export function VideoAds() {
         <div className="video-error">
           <div>⚠️ Could not display video</div>
           <div style={{ fontSize: '0.85rem', marginTop: 8 }}>{currentName}</div>
-          <div style={{ fontSize: '0.75rem', marginTop: 8, opacity: 0.7 }}>
-            {debug}
-          </div>
         </div>
       )}
 
       <div className="ad-label">
-        AD CYCLE • {safeIndex + 1}/{remoteUrls.length} • {status}
+        AD CYCLE • {safeIndex + 1}/{playlist.length} • {status}
         {debug ? ` · ${debug}` : ''}
       </div>
       <div className="ad-title">{currentName}</div>

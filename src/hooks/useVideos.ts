@@ -1,10 +1,15 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, type VideoRow } from '../lib/supabase';
 import { DATA_REFRESH_MS, isSupabaseConfigured } from '../config';
+
+function playlistFingerprint(rows: VideoRow[]): string {
+  return rows.map((v) => `${v.id}:${v.sort_order}:${v.public_url}`).join('|');
+}
 
 export function useVideos() {
   const [videos, setVideos] = useState<VideoRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const fpRef = useRef('');
 
   const fetchVideos = useCallback(async () => {
     if (!isSupabaseConfigured) {
@@ -21,10 +26,17 @@ export function useVideos() {
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      setVideos((data as VideoRow[]) || []);
+      const rows = (data as VideoRow[]) || [];
+      const fp = playlistFingerprint(rows);
+
+      // Only update React state when playlist truly changes
+      // (prevents mid-video restart every 30s poll)
+      if (fp !== fpRef.current) {
+        fpRef.current = fp;
+        setVideos(rows);
+      }
     } catch (err) {
       console.warn('Videos fetch failed:', err);
-      setVideos([]);
     } finally {
       setLoading(false);
     }
