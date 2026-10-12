@@ -38,7 +38,7 @@ async function toBlobUrl(remoteUrl: string): Promise<string> {
 
 /**
  * Full playlist cycle: play each ad to the end, then next.
- * After the last ad → back to first.
+ * After the last ad → back to first. No on-screen labels.
  */
 export function VideoAds() {
   const { videos, loading } = useVideos();
@@ -59,10 +59,7 @@ export function VideoAds() {
   );
 
   const [index, setIndex] = useState(0);
-  const [error, setError] = useState(false);
-  const [status, setStatus] = useState('Loading…');
   const [hasSound, setHasSound] = useState(false);
-  const [debug, setDebug] = useState('');
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const blobUrlRef = useRef<string | null>(null);
@@ -79,7 +76,6 @@ export function VideoAds() {
     hasSoundRef.current = hasSound;
   }, [hasSound]);
 
-  // Playlist changed (upload/reorder/delete) → start at first
   const prevPlaylistId = useRef('');
   useEffect(() => {
     if (!playlistId) return;
@@ -90,7 +86,7 @@ export function VideoAds() {
     if (!first) setIndex(0);
   }, [playlistId]);
 
-  // Unlock sound once
+  // Unlock sound once on user gesture
   useEffect(() => {
     const enableSound = () => {
       const el = videoRef.current;
@@ -98,7 +94,6 @@ export function VideoAds() {
       el.muted = false;
       hasSoundRef.current = true;
       setHasSound(true);
-      setStatus('Playing with Sound');
       el.play().catch(() => {});
     };
     const evts = ['click', 'touchstart', 'keydown'] as const;
@@ -108,7 +103,6 @@ export function VideoAds() {
     };
   }, []);
 
-  /** Advance to next ad — used by onEnded on the <video> element */
   const playNext = useCallback(() => {
     const len = playlistRef.current.length;
     if (len === 0) return;
@@ -119,42 +113,21 @@ export function VideoAds() {
   }, []);
 
   const handleEnded = useCallback(() => {
-    setError(false);
-    setStatus('Next video…');
-    // Clear loaded key so next index always loads
     loadedKeyRef.current = '';
     playNext();
   }, [playNext]);
 
   const handleError = useCallback(() => {
-    const el = videoRef.current;
-    setError(true);
-    setStatus('Skipping…');
-    setDebug(`err ${el?.error?.code ?? '?'}`);
     loadedKeyRef.current = '';
     window.setTimeout(() => {
-      setError(false);
       playNext();
     }, 1200);
   }, [playNext]);
 
   const handlePlaying = useCallback(() => {
-    const el = videoRef.current;
-    if (!el) return;
-    const w = el.videoWidth;
-    const h = el.videoHeight;
-    if (w > 0 && h > 0) {
-      setError(false);
-      setDebug(`${w}x${h}`);
-      setStatus(
-        hasSoundRef.current
-          ? 'Playing with Sound'
-          : 'Playing (click for sound)'
-      );
-    }
+    // no UI labels – playback only
   }, []);
 
-  // Load current index
   useEffect(() => {
     const el = videoRef.current;
     if (!el || playlist.length === 0) return;
@@ -169,9 +142,6 @@ export function VideoAds() {
     const gen = ++playGenRef.current;
 
     const run = async () => {
-      setError(false);
-      setStatus('Loading…');
-
       if (blobUrlRef.current) {
         URL.revokeObjectURL(blobUrlRef.current);
         blobUrlRef.current = null;
@@ -180,13 +150,11 @@ export function VideoAds() {
       el.pause();
       el.loop = false;
       el.removeAttribute('src');
-      // clear sources
       while (el.firstChild) el.removeChild(el.firstChild);
       el.load();
 
       let playUrl = item.url;
       try {
-        setStatus('Downloading…');
         const blobUrl = await toBlobUrl(item.url);
         if (gen !== playGenRef.current) {
           URL.revokeObjectURL(blobUrl);
@@ -208,21 +176,12 @@ export function VideoAds() {
 
       try {
         await el.play();
-        if (gen !== playGenRef.current) return;
-        setStatus(
-          hasSoundRef.current
-            ? 'Playing with Sound'
-            : 'Playing (click for sound)'
-        );
       } catch {
         try {
           el.muted = true;
           await el.play();
-          if (gen !== playGenRef.current) return;
-          setStatus('Playing (click for sound)');
         } catch {
-          if (gen !== playGenRef.current) return;
-          setStatus('Click anywhere to start');
+          // wait for user click
         }
       }
     };
