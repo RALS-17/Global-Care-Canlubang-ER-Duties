@@ -4,7 +4,10 @@ import { useVideos } from '../hooks/useVideos';
 const panelStyle: React.CSSProperties = {
   background: '#000',
   overflow: 'hidden',
-  borderRadius: 6,
+  borderRadius: 4,
+  width: '100%',
+  height: '100%',
+  position: 'relative',
 };
 
 const videoStyle: React.CSSProperties = {
@@ -13,7 +16,7 @@ const videoStyle: React.CSSProperties = {
   left: 0,
   width: '100%',
   height: '100%',
-  objectFit: 'contain',
+  objectFit: 'cover',
   background: '#000',
   zIndex: 1,
 };
@@ -239,31 +242,15 @@ export function VideoAds() {
   }, []);
 
   if (loading && playlist.length === 0) {
-    return (
-      <div className="video-ads" style={panelStyle}>
-        <div className="video-error">Loading videos…</div>
-      </div>
-    );
+    return <div className="video-ads" style={panelStyle} />;
   }
 
   if (playlist.length === 0) {
-    return (
-      <div className="video-ads" style={panelStyle}>
-        <div className="video-error">
-          <div>No videos uploaded</div>
-          <div style={{ fontSize: '0.9rem', marginTop: 8, opacity: 0.8 }}>
-            Upload in Admin → Videos
-          </div>
-        </div>
-      </div>
-    );
+    return <div className="video-ads" style={panelStyle} />;
   }
 
-  const safeIndex = index % playlist.length;
-  const currentName = playlist[safeIndex]?.name || '';
-
   return (
-    <div className="video-ads" style={panelStyle}>
+    <div className="video-ads" style={panelStyle} title="Click for sound">
       <video
         ref={videoRef}
         className="video-player"
@@ -275,25 +262,7 @@ export function VideoAds() {
         onEnded={handleEnded}
         onError={handleError}
         onPlaying={handlePlaying}
-        onWaiting={() => setStatus('Buffering…')}
       />
-
-      {!hasSound && !error && (
-        <div className="sound-hint">🔊 Click anywhere for sound</div>
-      )}
-
-      {error && (
-        <div className="video-error">
-          <div>⚠️ Could not display video</div>
-          <div style={{ fontSize: '0.85rem', marginTop: 8 }}>{currentName}</div>
-        </div>
-      )}
-
-      <div className="ad-label">
-        AD CYCLE • {safeIndex + 1}/{playlist.length} • {status}
-        {debug ? ` · ${debug}` : ''}
-      </div>
-      <div className="ad-title">{currentName}</div>
     </div>
   );
 }

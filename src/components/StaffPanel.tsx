@@ -1,165 +1,160 @@
-import { useState, useEffect } from 'react';
+import { useRef, useState, useLayoutEffect, useCallback } from 'react';
 import type { ShiftKey, ShiftData, StaffMember } from '../types';
-import { STAFF_GROUP_ROTATE_MS } from '../config';
 
 interface Props {
   currentShift: ShiftKey;
   shift: ShiftData;
 }
 
-function StaffListNames({
+/**
+ * Stays 1 column while names fit in the card.
+ * Switches to 2 columns only when single-column would scroll/overflow.
+ */
+function NameList({
   names,
-  currentShift,
-  tagClass = '',
-  tagLabel,
+  tag,
+  tagClass,
+  autoSplit = false,
 }: {
   names: string[];
-  currentShift: ShiftKey;
+  tag: string;
   tagClass?: string;
-  tagLabel?: string;
+  autoSplit?: boolean;
 }) {
-  const tag = tagLabel || currentShift;
-  const display = names.length > 0 ? names : ['No one listed'];
-  const loop = [...display, ...display];
-  const duration = Math.max(12, display.length * 4);
+  const empty = names.length === 0;
+  const display = empty ? ['— No one listed —'] : names.slice(0, 12);
+  const listRef = useRef<HTMLUListElement>(null);
+  const [twoCol, setTwoCol] = useState(false);
+
+  const measure = useCallback(() => {
+    if (!autoSplit || empty) {
+      setTwoCol(false);
+      return;
+    }
+    const el = listRef.current;
+    if (!el) return;
+
+    // Force single-column to test whether content fits
+    el.classList.remove('two-col');
+    // Allow measuring natural content height vs visible area
+    void el.offsetHeight;
+
+    const overflows = el.scrollHeight > el.clientHeight + 4;
+    if (overflows) {
+      el.classList.add('two-col');
+      setTwoCol(true);
+    } else {
+      setTwoCol(false);
+    }
+  }, [autoSplit, empty, display.length]);
+
+  useLayoutEffect(() => {
+    // Start single-column; only promote if it overflows
+    setTwoCol(false);
+    const id = requestAnimationFrame(() => measure());
+
+    const el = listRef.current;
+    if (!el || !autoSplit) {
+      return () => cancelAnimationFrame(id);
+    }
+
+    const ro = new ResizeObserver(() => measure());
+    ro.observe(el);
+    if (el.parentElement) ro.observe(el.parentElement);
+
+    window.addEventListener('resize', measure);
+    return () => {
+      cancelAnimationFrame(id);
+      ro.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [measure, autoSplit, display.join('|')]);
 
   return (
-    <div className="staff-list-wrapper has-scroll">
-      <ul
-        className="staff-list scrolling"
-        style={{ animationDuration: `${duration}s` }}
-      >
-        {loop.map((name, i) => (
-          <li key={`${name}-${i}`} className="staff-item">
-            <span
-              className="staff-name"
-              style={names.length === 0 ? { opacity: 0.45, fontWeight: 500 } : undefined}
-            >
-              {name}
-            </span>
-            {names.length > 0 && (
-              <span className={`shift-tag ${tagClass}`}>{tag}</span>
-            )}
-          </li>
-        ))}
-      </ul>
-    </div>
+    <ul ref={listRef} className={`duty-list ${twoCol ? 'two-col' : ''}`}>
+      {display.map((name, i) => (
+        <li key={`${name}-${i}`} className={`duty-row ${empty ? 'is-empty' : ''}`}>
+          <span className="duty-name">{name}</span>
+          {!empty && <span className={`duty-tag ${tagClass || ''}`}>{tag}</span>}
+        </li>
+      ))}
+    </ul>
   );
 }
 
-/** ROD / Consultant – name + department */
-function StaffListMembers({
+function MemberList({
   members,
-  currentShift,
-  tagClass = '',
-  roleLabel,
+  tag,
+  tagClass,
 }: {
   members: StaffMember[];
-  currentShift: ShiftKey;
+  tag: string;
   tagClass?: string;
-  roleLabel: string;
 }) {
-  const display =
-    members.length > 0 ? members : [{ name: 'No one listed' } as StaffMember];
-  const loop = [...display, ...display];
-  const duration = Math.max(12, display.length * 4);
   const empty = members.length === 0;
+  const display = empty
+    ? [{ name: '— No one listed —' } as StaffMember]
+    : members.slice(0, 12);
 
   return (
-    <div className="staff-list-wrapper has-scroll">
-      <ul
-        className="staff-list scrolling"
-        style={{ animationDuration: `${duration}s` }}
-      >
-        {loop.map((m, i) => (
-          <li key={`${m.name}-${m.department || ''}-${i}`} className="staff-item staff-item-dept">
-            <div className="staff-text">
-              <span
-                className="staff-name"
-                style={empty ? { opacity: 0.45, fontWeight: 500 } : undefined}
-              >
-                {m.name}
-              </span>
-              {!empty && m.department && (
-                <span className="staff-dept">{m.department}</span>
-              )}
-            </div>
-            {!empty && (
-              <span className={`shift-tag ${tagClass}`}>
-                {roleLabel} • {currentShift}
-              </span>
+    <ul className="duty-list">
+      {display.map((m, i) => (
+        <li
+          key={`${m.name}-${m.department || ''}-${i}`}
+          className={`duty-row ${empty ? 'is-empty' : ''}`}
+        >
+          <div className="duty-text">
+            <span className="duty-name">{m.name}</span>
+            {!empty && m.department && (
+              <span className="duty-dept">{m.department}</span>
             )}
-          </li>
-        ))}
-      </ul>
-    </div>
+          </div>
+          {!empty && <span className={`duty-tag ${tagClass || ''}`}>{tag}</span>}
+        </li>
+      ))}
+    </ul>
   );
 }
 
-export function StaffPanel({ currentShift, shift }: Props) {
-  const [group, setGroup] = useState<0 | 1>(0);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setGroup((g) => (g === 0 ? 1 : 0));
-    }, STAFF_GROUP_ROTATE_MS);
-    return () => clearInterval(timer);
-  }, []);
-
+/**
+ * Layout 2:
+ * Consultant (left tall) | Video (center) | ROD (right tall)
+ *                    SHO | Nurses (under video)
+ */
+export function StaffPanel({ shift }: Props) {
   return (
-    <div className="staff-panel">
-      {group === 0 ? (
-        <>
-          <div className="staff-card nurses-card">
-            <div className="staff-card-header nurses-header">
-              <span className="icon">👩‍⚕️</span>
-              <span>NURSES ON DUTY</span>
-            </div>
-            <StaffListNames names={shift.nurses} currentShift={currentShift} />
-          </div>
+    <>
+      <div className="duty-card consult-card">
+        <div className="duty-card-head consult-head">
+          <span className="duty-icon">🩺</span>
+          <span>CONSULTANT ON DECK</span>
+        </div>
+        <MemberList members={shift.consultants} tag="Cons" tagClass="tag-blue" />
+      </div>
 
-          <div className="staff-card rods-card">
-            <div className="staff-card-header rods-header">
-              <span className="icon">👨‍⚕️</span>
-              <span>RESIDENT ON DUTY (ROD)</span>
-            </div>
-            <StaffListMembers
-              members={shift.rods}
-              currentShift={currentShift}
-              tagClass="resident"
-              roleLabel="Resident"
-            />
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="staff-card consultants-card">
-            <div className="staff-card-header consultants-header">
-              <span className="icon">🩺</span>
-              <span>CONSULTANT ON DECK</span>
-            </div>
-            <StaffListMembers
-              members={shift.consultants}
-              currentShift={currentShift}
-              tagClass="consultant"
-              roleLabel="Consultant"
-            />
-          </div>
+      <div className="duty-card rod-card">
+        <div className="duty-card-head rod-head">
+          <span className="duty-icon">👨‍⚕️</span>
+          <span>RESIDENT ON DUTY (ROD)</span>
+        </div>
+        <MemberList members={shift.rods} tag="ROD" tagClass="tag-blue" />
+      </div>
 
-          <div className="staff-card shos-card">
-            <div className="staff-card-header shos-header">
-              <span className="icon">🏨</span>
-              <span>SENIOR HOUSE OFFICER (SHO)</span>
-            </div>
-            <StaffListNames
-              names={shift.shos}
-              currentShift={currentShift}
-              tagClass="sho"
-              tagLabel={`SHO • ${currentShift}`}
-            />
-          </div>
-        </>
-      )}
-    </div>
+      <div className="duty-card sho-card">
+        <div className="duty-card-head sho-head">
+          <span className="duty-icon">🏨</span>
+          <span>SENIOR HOUSE OFFICER (SHO)</span>
+        </div>
+        <NameList names={shift.shos} tag="SHO" tagClass="tag-green" autoSplit />
+      </div>
+
+      <div className="duty-card nurses-card">
+        <div className="duty-card-head nurses-head">
+          <span className="duty-icon">👩‍⚕️</span>
+          <span>NURSES ON DUTY</span>
+        </div>
+        <NameList names={shift.nurses} tag="RN" tagClass="tag-green" autoSplit />
+      </div>
+    </>
   );
 }

@@ -10,17 +10,17 @@ const SHIFT_ORDER: ShiftKey[] = ['6-2', '2-10', '10-6'];
 export function FooterSchedule({ currentShift, data }: Props) {
   return (
     <footer className="footer-schedule">
+      <span className="footer-brand">Global Care Canlubang · ER Duty Board</span>
+      <span className="footer-sep">·</span>
       <span className="footer-label">FULL DAY SCHEDULE</span>
-      <span className="separator">•</span>
-
-      {SHIFT_ORDER.map((key, i) => {
+      {SHIFT_ORDER.map((key) => {
         const isCurrent = key === currentShift;
         return (
-          <span key={key} className={`shift-item ${isCurrent ? 'current' : ''}`}>
-            {isCurrent && <span className="arrow">← </span>}
-            {data.shifts[key].label}
-            {isCurrent && <span className="current-text"> CURRENT</span>}
-            {i < SHIFT_ORDER.length - 1 && <span className="separator"> • </span>}
+          <span
+            key={key}
+            className={`footer-shift ${isCurrent ? 'is-current' : ''}`}
+          >
+            {isCurrent ? `← ${data.shifts[key].label} CURRENT` : data.shifts[key].label}
           </span>
         );
       })}
