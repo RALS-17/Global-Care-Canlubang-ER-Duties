@@ -22,7 +22,7 @@ function NameList({
   autoSplit?: boolean;
 }) {
   const empty = names.length === 0;
-  const display = empty ? ['— No one listed —'] : names.slice(0, 12);
+  const display = empty ? ['— No one listed —'] : names.slice(0, 25);
   const listRef = useRef<HTMLUListElement>(null);
   const [twoCol, setTwoCol] = useState(false);
 
@@ -94,7 +94,7 @@ function MemberList({
   const empty = members.length === 0;
   const display = empty
     ? [{ name: '— No one listed —' } as StaffMember]
-    : members.slice(0, 12);
+    : members.slice(0, 25);
 
   return (
     <ul className="duty-list">
