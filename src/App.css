@@ -259,12 +259,12 @@ html, body, #root {
   flex: 1 1 0%;
   min-height: 0;
   overflow: hidden;
-  padding: 0 0.55rem 0.4rem;
+  padding: 0 0.45rem 0.35rem;
   display: grid;
-  grid-template-columns: minmax(180px, 0.9fr) minmax(0, 1.35fr) minmax(0, 1.35fr) minmax(180px, 0.9fr);
-  /* Top (video + side duties) ~60% · bottom (SHO + Nurses) ~40% */
-  grid-template-rows: 6fr 4fr;
-  gap: 0.35rem;
+  grid-template-columns: minmax(200px, 0.95fr) minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(200px, 0.95fr);
+  /* Top ~70% (ads dominant) · bottom ~30% (SHO + Nurses – less empty) */
+  grid-template-rows: 7fr 3fr;
+  gap: 0.3rem;
   align-content: stretch;
 }
 
@@ -276,13 +276,16 @@ html, body, #root {
 .video-slot {
   grid-column: 2 / 4;
   grid-row: 1;
+  position: relative;
   min-height: 0;
   min-width: 0;
   width: 100%;
   height: 100%;
   justify-self: stretch;
   align-self: stretch;
-  /* fills top ~60% row – no small max-height cap */
+  overflow: hidden;
+  background: #000;
+  border-radius: var(--radius);
 }
 
 .rod-card {
@@ -350,8 +353,8 @@ html, body, #root {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 0.35rem;
-  padding: 0.32rem 0.55rem;
+  gap: 0.3rem;
+  padding: 0.28rem 0.5rem;
   border-bottom: 1px solid var(--border);
 }
 
@@ -409,15 +412,13 @@ html, body, #root {
 /* ========== VIDEO ========== */
 .video-slot .video-ads,
 .video-ads {
-  position: relative !important;
+  position: absolute !important;
+  inset: 0 !important;
   width: 100% !important;
   height: 100% !important;
   min-height: 0 !important;
-  left: auto !important;
-  right: auto !important;
-  top: auto !important;
-  bottom: auto !important;
-  background: var(--video-bg);
+  max-height: none !important;
+  background: #000;
   border-radius: var(--radius);
   overflow: hidden;
   border: 1px solid var(--border);
@@ -425,15 +426,16 @@ html, body, #root {
 }
 
 .video-player {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover; /* fill entire frame, no black bars */
-  object-position: center;
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center center !important;
   display: block;
   background: #000;
   z-index: 1;
+  border: 0;
 }
 
 .ad-label,
@@ -703,4 +705,21 @@ html, body, #root {
 .video-ads .sound-hint,
 .video-ads .video-error {
   display: none !important;
+}
+
+/* Bottom cards: pack names to top (less empty look when few staff) */
+.sho-card .duty-list,
+.nurses-card .duty-list {
+  align-content: start;
+  justify-content: flex-start;
+}
+
+/* Side columns denser on large TV */
+@media (min-width: 1400px) {
+  .duty-name { font-size: 0.92rem; }
+  .duty-dept { font-size: 0.74rem; }
+  .duty-row { padding: 0.3rem 0.55rem; }
+  .main-content.layout-2 {
+    grid-template-rows: 7.2fr 2.8fr;
+  }
 }

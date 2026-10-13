@@ -7,16 +7,20 @@ const panelStyle: React.CSSProperties = {
   borderRadius: 4,
   width: '100%',
   height: '100%',
-  position: 'relative',
+  position: 'absolute',
+  inset: 0,
 };
 
 const videoStyle: React.CSSProperties = {
   position: 'absolute',
   top: 0,
   left: 0,
+  right: 0,
+  bottom: 0,
   width: '100%',
   height: '100%',
   objectFit: 'cover',
+  objectPosition: 'center center',
   background: '#000',
   zIndex: 1,
 };
